@@ -1,5 +1,6 @@
 //! Financial charting widgets for [Ratatui](https://ratatui.rs).
 
+pub mod axis;
 pub mod scale;
 
 mod series;
