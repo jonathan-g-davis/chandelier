@@ -4,7 +4,7 @@
 use chandelier::{Candle, CandleSeries, CandlestickChart, PriceAxis, TimeAxis};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Style};
+use ratatui_core::style::{Color, Modifier, Style};
 use ratatui_core::widgets::Widget;
 
 /// Collects the foreground colors actually used across the buffer.
@@ -168,6 +168,36 @@ fn partial_wick_tips_use_a_half_glyph_in_the_wick_color() {
     assert!(saw_half_tip, "expected a half-row wick tip");
 }
 
+#[test]
+fn partial_bodies_render_over_a_transparent_background() {
+    // With no chart background set, partial body cells are the body color in the
+    // foreground over a Reset (terminal default) background, so the chart needs
+    // no background to render correctly.
+    let bull = Color::Rgb(0, 200, 120);
+    let candles = [Candle::new(100.0, 130.0, 70.0, 104.0)];
+    let series = CandleSeries::new(&candles).width(1).bull_style(bull);
+    let chart = CandlestickChart::new(series).axes(false); // no .style(): bg stays Reset
+    let buf = render(&chart, 1, 24);
+
+    let mut saw_partial = false;
+    for y in 0..buf.area.height {
+        let cell = &buf[(0, y)];
+        if is_partial_block(cell.symbol()) {
+            saw_partial = true;
+            assert_eq!(
+                cell.fg, bull,
+                "partial body at row {y} should be body-colored"
+            );
+            assert_eq!(
+                cell.bg,
+                Color::Reset,
+                "partial body at row {y} should sit on the terminal default background"
+            );
+        }
+    }
+    assert!(saw_partial, "expected at least one partial body cell");
+}
+
 /// The truecolor SGR prefix for a cell's foreground and background, so the dump
 /// reflects fg/bg-inverted cells (a body lit from the top is inverted).
 fn sgr(fg: Color, bg: Color) -> String {
@@ -216,7 +246,13 @@ fn show_chart() {
         let mut line = String::new();
         for x in 0..buf.area.width {
             let cell = &buf[(x, y)];
+            // Reset per cell, then set colors and reverse, so a reversed cell
+            // (a body lit from the top) is shown the way the terminal draws it.
+            line.push_str("\x1b[0m");
             line.push_str(&sgr(cell.fg, cell.bg));
+            if cell.modifier.contains(Modifier::REVERSED) {
+                line.push_str("\x1b[7m");
+            }
             line.push_str(cell.symbol());
         }
         line.push_str("\x1b[0m");

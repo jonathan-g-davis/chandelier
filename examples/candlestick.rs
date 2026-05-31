@@ -59,8 +59,8 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         .bear_style(Color::Rgb(239, 83, 80))
         .wick_style(Color::Rgb(110, 116, 130));
 
-    // A concrete chart background makes the sub-cell body tops render crisply,
-    // since the partial-cell trick draws the empty half against this color.
+    // A dark chart background here is purely cosmetic. Partial bodies render
+    // correctly over the terminal default too, so the background is optional.
     let axis_style = Style::new().fg(Color::Rgb(120, 123, 134));
     let chart = CandlestickChart::new(series)
         .style(Style::new().bg(Color::Rgb(13, 17, 23)))

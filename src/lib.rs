@@ -28,8 +28,8 @@
 //! - A candlestick chart that autoscales to the data in view.
 //! - Sub-cell body endpoints: open and close levels are placed to the nearest
 //!   eighth of a row with partial block characters instead of snapping to whole
-//!   rows. For a crisp top edge, set the chart's base style background to your
-//!   terminal's background color.
+//!   rows. These render correctly over any background, including the terminal
+//!   default, so setting the chart's base style background is optional.
 //! - A right-hand price axis with round-numbered ticks and a bottom time axis,
 //!   each styled through its own [`PriceAxis`] and [`TimeAxis`].
 

@@ -22,7 +22,7 @@ use std::ops::Range;
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::Color;
+use ratatui_core::style::{Color, Modifier};
 
 /// Vertical sub-cell steps per terminal row (one eighth-block each).
 const EIGHTHS_PER_ROW: u32 = 8;
@@ -120,29 +120,36 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, marks: &CandleMarks) {
 /// Fills the segment `[a, b)` (eighths from the top of the cell) at `(x, y)`
 /// with `fill`, drawing the remaining (empty) eighths in the `empty` color.
 ///
-/// A segment flush with the cell top is drawn with foreground/background
-/// inversion so the lit eighths sit at the top; otherwise the eighths are lit
-/// from the bottom.
+/// A segment flush with the cell top sets the `REVERSED` attribute so the lit
+/// eighths sit at the top: the body goes in the cell background and the empty
+/// eighths in the foreground glyph, and the terminal swaps the two when it
+/// draws. Doing the swap at display time (rather than swapping the colors here)
+/// lets `empty` be [`Color::Reset`], so a body renders correctly without a
+/// concrete chart background. Other segments are lit directly from the bottom.
 fn set_body_cell(buf: &mut Buffer, x: u16, y: u16, a: u16, b: u16, fill: Color, empty: Color) {
     let eighths = EIGHTHS_PER_ROW as u16;
 
-    let (symbol, fg, bg) = if b - a == eighths {
-        // A full cell: a solid block, independent of the surrounding colors.
-        ("█", fill, empty)
+    let (symbol, reversed) = if b - a == eighths {
+        // A full cell: a solid block.
+        ("█", false)
     } else if a == 0 {
-        // Lit from the top: draw the unlit lower eighths in the empty color over
-        // a fill-colored cell, so the top `b` eighths show the fill.
-        (EIGHTHS[(eighths - b) as usize], empty, fill)
+        // Lit from the top: the lower `8 - b` eighths form the glyph, reversed so
+        // the body fills the top `b` eighths through the cell background.
+        (EIGHTHS[(eighths - b) as usize], true)
     } else {
-        // Lit from the bottom (or a small floating segment): draw the lit
-        // eighths directly, leaving the rest in the empty color.
-        (EIGHTHS[(b - a) as usize], fill, empty)
+        // Lit from the bottom (or a small floating segment).
+        (EIGHTHS[(b - a) as usize], false)
     };
 
     if let Some(cell) = buf.cell_mut((x, y)) {
         cell.set_symbol(symbol);
-        cell.fg = fg;
-        cell.bg = bg;
+        cell.fg = fill;
+        cell.bg = empty;
+        if reversed {
+            cell.modifier.insert(Modifier::REVERSED);
+        } else {
+            cell.modifier.remove(Modifier::REVERSED);
+        }
     }
 }
 
@@ -279,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn flush_top_segment_inverts() {
+    fn flush_top_segment_uses_reverse_to_fill_the_top() {
         let plot = Rect::new(0, 0, 1, 1);
         let mut buf = buffer(1, 1);
 
@@ -288,9 +295,41 @@ mod tests {
 
         let cell = &buf[(0, 0)];
         assert!(is_partial(cell.symbol()), "got {:?}", cell.symbol());
-        // Inversion: the body color sits in the background, lit eighths in empty.
-        assert_eq!(cell.bg, BODY);
-        assert_eq!(cell.fg, BG);
+        // The body is the foreground and the empty eighths the background, with
+        // REVERSED so the terminal swaps them. This keeps `empty` (which may be
+        // Color::Reset) out of the foreground, so it renders without a chart bg.
+        assert_eq!(cell.fg, BODY);
+        assert_eq!(cell.bg, BG);
+        assert!(cell.modifier.contains(Modifier::REVERSED));
+    }
+
+    #[test]
+    fn flush_top_segment_is_transparent_over_a_reset_background() {
+        let plot = Rect::new(0, 0, 1, 1);
+        let mut buf = buffer(1, 1);
+
+        // Top half of the cell, with a Reset (terminal default) empty color.
+        let marks = CandleMarks {
+            cols: 0..1,
+            center_col: 0,
+            body_top_row: 0.0,
+            body_bottom_row: 0.5,
+            high_row: 0.0,
+            low_row: 0.5,
+            body: BODY,
+            wick: WICK,
+            bg: Color::Reset,
+        };
+        draw_candle(&mut buf, plot, &marks);
+
+        // The body stays in the foreground and Reset in the background, with
+        // REVERSED. The terminal resolves Reset to its real background and swaps,
+        // so the top shows the body and the bottom the transparent background.
+        let cell = &buf[(0, 0)];
+        assert!(is_partial(cell.symbol()), "got {:?}", cell.symbol());
+        assert_eq!(cell.fg, BODY);
+        assert_eq!(cell.bg, Color::Reset);
+        assert!(cell.modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
@@ -303,9 +342,11 @@ mod tests {
 
         let cell = &buf[(0, 0)];
         assert!(is_partial(cell.symbol()), "got {:?}", cell.symbol());
-        // Lit directly: the body is the foreground, the empty half the background.
+        // Lit directly (no reverse): the body is the foreground, the empty half
+        // the background.
         assert_eq!(cell.fg, BODY);
         assert_eq!(cell.bg, BG);
+        assert!(!cell.modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
