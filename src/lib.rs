@@ -1,4 +1,37 @@
 //! Financial charting widgets for [Ratatui](https://ratatui.rs).
+//!
+//! # Example
+//!
+//! A chart is a [`CandleSeries`] (the bars and how they are colored) drawn by a
+//! [`CandlestickChart`] (the container that autoscales the price axis, lays out
+//! the plot, and draws the axes):
+//!
+//! ```
+//! use chandelier::{Candle, CandleSeries, CandlestickChart};
+//! use ratatui_core::buffer::Buffer;
+//! use ratatui_core::layout::Rect;
+//! use ratatui_core::widgets::Widget;
+//!
+//! let candles = [
+//!     Candle::new(100.0, 105.0, 99.0, 104.0),
+//!     Candle::new(104.0, 108.0, 103.0, 106.0),
+//!     Candle::new(106.0, 107.0, 101.0, 102.0),
+//! ];
+//!
+//! let chart = CandlestickChart::new(CandleSeries::new(&candles));
+//! ```
+//!
+//! See `examples/candlestick.rs` for a complete runnable terminal app.
+//!
+//! # What it draws
+//!
+//! - A candlestick chart that autoscales to the data in view.
+//! - Sub-cell body endpoints: open and close levels are placed to the nearest
+//!   eighth of a row with partial block characters instead of snapping to whole
+//!   rows. For a crisp top edge, set the chart's base style background to your
+//!   terminal's background color.
+//! - A right-hand price axis with round-numbered ticks and a bottom time axis,
+//!   each styled through its own [`PriceAxis`] and [`TimeAxis`].
 
 mod axis;
 mod block;

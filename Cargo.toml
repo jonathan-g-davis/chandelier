@@ -16,4 +16,5 @@ categories = ["command-line-interface", "visualization", "finance"]
 ratatui-core = "0.1"
 
 [dev-dependencies]
+rand = "0.9"
 ratatui = "0.30"
