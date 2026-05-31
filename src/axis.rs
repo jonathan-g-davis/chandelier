@@ -1,7 +1,117 @@
-//! Tick selection for the price and time axes.
+//! The chart's two axes and the tick selection behind them.
 //!
-//! These are pure helpers. They pick where labels go and how they read; the
-//! chart turns the positions into buffer writes.
+//! [`PriceAxis`] and [`TimeAxis`] are small style-and-layout configurations the
+//! chart composes; the tick helpers pick where price labels go and how they read.
+
+use ratatui_core::style::{Color, Style, Styled};
+
+/// Configuration for the price (vertical) axis.
+///
+/// Carries how the labels are styled and how many columns the axis reserves on
+/// the right. The value range and tick positions are chosen automatically from
+/// the data in view; choosing them manually is not offered yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PriceAxis {
+    pub(crate) style: Style,
+    pub(crate) width: u16,
+}
+
+impl PriceAxis {
+    /// A price axis with gray labels reserving eight columns.
+    pub fn new() -> Self {
+        Self {
+            style: Style::new().fg(Color::Gray),
+            width: 8,
+        }
+    }
+
+    /// Sets the label style.
+    #[must_use]
+    pub fn style(mut self, style: impl Into<Style>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// Sets the width, in columns, reserved for the axis labels.
+    #[must_use]
+    pub fn width(mut self, cols: u16) -> Self {
+        self.width = cols;
+        self
+    }
+}
+
+impl Default for PriceAxis {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Styled for PriceAxis {
+    type Item = PriceAxis;
+
+    fn style(&self) -> Style {
+        self.style
+    }
+
+    fn set_style<S: Into<Style>>(mut self, style: S) -> Self::Item {
+        self.style = style.into();
+        self
+    }
+}
+
+/// Configuration for the time (horizontal) axis.
+///
+/// Carries the label style and, optionally, the text for each candle aligned to
+/// the full series (index `i` labels `candles[i]`). Without labels the axis
+/// shows candle indices.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeAxis<'a> {
+    pub(crate) style: Style,
+    pub(crate) labels: Option<&'a [String]>,
+}
+
+impl<'a> TimeAxis<'a> {
+    /// A time axis with gray labels and no explicit label text.
+    pub fn new() -> Self {
+        Self {
+            style: Style::new().fg(Color::Gray),
+            labels: None,
+        }
+    }
+
+    /// Sets the label style.
+    #[must_use]
+    pub fn style(mut self, style: impl Into<Style>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// Sets the label text, aligned to the full candle slice.
+    #[must_use]
+    pub fn labels(mut self, labels: &'a [String]) -> Self {
+        self.labels = Some(labels);
+        self
+    }
+}
+
+impl Default for TimeAxis<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> Styled for TimeAxis<'a> {
+    type Item = TimeAxis<'a>;
+
+    fn style(&self) -> Style {
+        self.style
+    }
+
+    fn set_style<S: Into<Style>>(mut self, style: S) -> Self::Item {
+        self.style = style.into();
+        self
+    }
+}
 
 /// Rounds a span to a "nice" number (1, 2, 5 times a power of ten).
 ///
@@ -39,7 +149,7 @@ fn nice_num(span: f64, round: bool) -> f64 {
 
 /// Picks roughly `target` evenly-spaced, round-numbered price ticks spanning
 /// `[min, max]`. Ticks outside the domain are dropped by the caller as needed.
-pub fn price_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
+pub(crate) fn price_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
     let target = target.max(2);
     let range = nice_num(max - min, false);
     let step = nice_num(range / (target as f64 - 1.0), true);
@@ -65,7 +175,7 @@ pub fn price_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
 
 /// Formats a price for an axis label, choosing decimal places from the tick
 /// spacing so small ranges keep precision and large ones stay compact.
-pub fn format_price(value: f64, step: f64) -> String {
+pub(crate) fn format_price(value: f64, step: f64) -> String {
     let decimals = if step >= 1.0 {
         0
     } else if step >= 0.1 {
@@ -115,5 +225,28 @@ mod tests {
         let ticks = price_ticks(50.0, 50.0, 6);
         assert!(!ticks.is_empty());
         assert!(ticks.iter().all(|t| t.is_finite()));
+    }
+
+    #[test]
+    fn price_axis_defaults_and_builders() {
+        let axis = PriceAxis::default();
+        assert_eq!(axis.width, 8);
+        assert_eq!(axis.style.fg, Some(Color::Gray));
+
+        let axis = axis.width(10).style(Color::Red);
+        assert_eq!(axis.width, 10);
+        assert_eq!(axis.style.fg, Some(Color::Red));
+    }
+
+    #[test]
+    fn time_axis_defaults_and_builders() {
+        let axis = TimeAxis::default();
+        assert_eq!(axis.style.fg, Some(Color::Gray));
+        assert!(axis.labels.is_none());
+
+        let labels = [String::from("a"), String::from("b")];
+        let axis = axis.labels(&labels).style(Color::Blue);
+        assert_eq!(axis.labels.unwrap().len(), 2);
+        assert_eq!(axis.style.fg, Some(Color::Blue));
     }
 }

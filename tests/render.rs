@@ -1,7 +1,7 @@
 //! Renders charts into an in-memory buffer and asserts what lands on the grid.
 //! This verifies the renderer without an interactive terminal.
 
-use chandelier::{Candle, Candlestick};
+use chandelier::{Candle, CandleSeries, CandlestickChart, PriceAxis, TimeAxis};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
@@ -18,7 +18,7 @@ fn foreground_colors(buf: &Buffer) -> Vec<Color> {
     seen
 }
 
-fn render(chart: &Candlestick, w: u16, h: u16) -> Buffer {
+fn render(chart: &CandlestickChart, w: u16, h: u16) -> Buffer {
     let area = Rect::new(0, 0, w, h);
     let mut buf = Buffer::empty(area);
     chart.render(area, &mut buf);
@@ -27,7 +27,7 @@ fn render(chart: &Candlestick, w: u16, h: u16) -> Buffer {
 
 #[test]
 fn empty_series_renders_nothing() {
-    let chart = Candlestick::new(&[]);
+    let chart = CandlestickChart::new(CandleSeries::new(&[]));
     let buf = render(&chart, 20, 10);
     assert!(buf.content().iter().all(|c| c.symbol() == " "));
 }
@@ -38,10 +38,11 @@ fn bull_and_bear_use_distinct_colors() {
         Candle::new(100.0, 110.0, 98.0, 108.0), // bull
         Candle::new(108.0, 109.0, 95.0, 96.0),  // bear
     ];
-    let chart = Candlestick::new(&candles)
+    let series = CandleSeries::new(&candles)
         .width(3)
         .bull_style(Color::Green)
-        .bear_style(Color::Red)
+        .bear_style(Color::Red);
+    let chart = CandlestickChart::new(series)
         .style(Style::new().bg(Color::Black))
         .axes(false);
     let buf = render(&chart, 30, 16);
@@ -54,7 +55,7 @@ fn bull_and_bear_use_distinct_colors() {
 #[test]
 fn draws_wick_and_body_glyphs() {
     let candles = [Candle::new(50.0, 60.0, 40.0, 55.0)];
-    let chart = Candlestick::new(&candles).width(3).axes(false);
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3)).axes(false);
     let buf = render(&chart, 20, 16);
 
     let symbols: String = buf.content().iter().map(|c| c.symbol()).collect();
@@ -71,7 +72,8 @@ fn price_axis_labels_are_drawn() {
         Candle::new(100.0, 105.0, 99.0, 104.0),
         Candle::new(104.0, 108.0, 103.0, 106.0),
     ];
-    let chart = Candlestick::new(&candles).price_axis_width(8);
+    let chart = CandlestickChart::new(CandleSeries::new(&candles))
+        .price_axis(PriceAxis::default().width(8));
     let buf = render(&chart, 40, 14);
 
     let text: String = buf.content().iter().map(|c| c.symbol()).collect();
@@ -90,7 +92,7 @@ fn renders_within_bounds_for_many_candles() {
             Candle::new(base, base + 3.0, base - 2.0, base + 1.0)
         })
         .collect();
-    let chart = Candlestick::new(&candles).width(1).gap(0);
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(1).gap(0));
     let _ = render(&chart, 24, 12); // must not panic
 }
 
@@ -109,10 +111,11 @@ fn partial_body_edges_keep_the_background_and_never_overstate_the_body() {
     let bull = Color::Rgb(0, 200, 120);
     let wick = Color::Rgb(110, 116, 130);
     let candles = [Candle::new(100.0, 130.0, 70.0, 104.0)];
-    let chart = Candlestick::new(&candles)
+    let series = CandleSeries::new(&candles)
         .width(1)
         .bull_style(bull)
-        .wick_style(wick)
+        .wick_style(wick);
+    let chart = CandlestickChart::new(series)
         .style(Style::new().bg(bg))
         .axes(false);
     let buf = render(&chart, 1, 24);
@@ -138,10 +141,11 @@ fn partial_wick_tips_use_a_half_glyph_in_the_wick_color() {
     let bull = Color::Rgb(0, 200, 120);
     let wick = Color::Rgb(110, 116, 130);
     let candles = [Candle::new(100.0, 130.0, 70.0, 104.0)];
-    let chart = Candlestick::new(&candles)
+    let series = CandleSeries::new(&candles)
         .width(1)
         .bull_style(bull)
-        .wick_style(wick)
+        .wick_style(wick);
+    let chart = CandlestickChart::new(series)
         .style(Style::new().bg(bg))
         .axes(false);
     let buf = render(&chart, 1, 24);
@@ -194,14 +198,17 @@ fn show_chart() {
         Candle::new(102.0, 108.0, 101.0, 107.5),
         Candle::new(107.5, 110.0, 106.0, 106.5),
     ];
-    let chart = Candlestick::new(&candles)
+    let series = CandleSeries::new(&candles)
         .width(3)
         .gap(1)
-        .style(Style::new().bg(Color::Rgb(13, 17, 23)))
         .bull_style(Color::Rgb(38, 166, 154))
         .bear_style(Color::Rgb(239, 83, 80))
-        .wick_style(Color::Rgb(110, 116, 130))
-        .axis_style(Color::Rgb(120, 123, 134));
+        .wick_style(Color::Rgb(110, 116, 130));
+    let axis_style = Color::Rgb(120, 123, 134);
+    let chart = CandlestickChart::new(series)
+        .style(Style::new().bg(Color::Rgb(13, 17, 23)))
+        .price_axis(PriceAxis::default().style(axis_style))
+        .time_axis(TimeAxis::default().style(axis_style));
     let buf = render(&chart, 44, 16);
 
     println!();

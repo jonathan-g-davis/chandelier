@@ -1,11 +1,12 @@
 //! Financial charting widgets for [Ratatui](https://ratatui.rs).
 
-pub mod axis;
-pub mod scale;
-
+mod axis;
 mod block;
-mod candlestick;
+mod chart;
+mod scale;
 mod series;
 
-pub use candlestick::Candlestick;
-pub use series::{Candle, price_bounds};
+pub use axis::{PriceAxis, TimeAxis};
+pub use chart::CandlestickChart;
+pub use scale::{PriceScale, TimeScale};
+pub use series::{Candle, CandleSeries, price_bounds};
