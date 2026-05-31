@@ -2,5 +2,28 @@
 name = "chandelier"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+description = "Financial charting widgets for Ratatui."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jonathan-g-davis/chandelier"
+homepage = "https://github.com/jonathan-g-davis/chandelier"
+authors = ["Jonathan Davis <jonathan.grady.davis@gmail.com>"]
+readme = "README.md"
+keywords = ["ratatui", "tui", "candlestick", "chart", "finance"]
+categories = ["command-line-interface", "visualization", "finance"]
+include = [
+    "/src/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+]
 
 [dependencies]
+ratatui-core = "0.1"
+
+[dev-dependencies]
+rand = "0.9"
+ratatui = "0.30"
