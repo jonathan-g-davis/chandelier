@@ -11,6 +11,15 @@ authors = ["Jonathan Davis <jonathan.grady.davis@gmail.com>"]
 readme = "README.md"
 keywords = ["ratatui", "tui", "candlestick", "chart", "finance"]
 categories = ["command-line-interface", "visualization", "finance"]
+include = [
+    "/src/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+]
 
 [dependencies]
 ratatui-core = "0.1"
