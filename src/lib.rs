@@ -1,5 +1,7 @@
 //! Financial charting widgets for [Ratatui](https://ratatui.rs).
 
+pub mod scale;
+
 mod series;
 
 pub use series::{Candle, price_bounds};
