@@ -3,7 +3,13 @@
 //! Input is plain values. Chandelier does not fetch, compute, or persist
 //! anything. Callers pass already-computed OHLC data.
 
+use ratatui_core::buffer::Buffer;
+use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
+
+use crate::block::CandleMarks;
+use crate::render::{PlotLayout, Rasterizer, Series};
+use crate::scale::TimeScale;
 
 /// A single open/high/low/close bar.
 ///
@@ -152,6 +158,42 @@ impl<'a> CandleSeries<'a> {
         self.wick
             .and_then(|w| w.fg)
             .unwrap_or_else(|| self.body_color(candle))
+    }
+}
+
+impl Series for CandleSeries<'_> {
+    fn price_bounds(&self) -> Option<(f64, f64)> {
+        price_bounds(self.candles)
+    }
+
+    fn time_scale(&self, plot: Rect) -> TimeScale {
+        TimeScale::new(plot.width, self.candles.len(), self.width.max(1), self.gap)
+    }
+
+    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout, rasterizer: &dyn Rasterizer) {
+        let plot = layout.plot;
+        let scale = layout.price;
+        let time = layout.time;
+        let bg = layout.bg;
+
+        for vi in 0..time.visible() {
+            let candle = self.candles[time.first_visible() + vi];
+            let col_left = plot.x + time.index_to_col(vi);
+            let body_cols = time.candle_width();
+
+            let marks = CandleMarks {
+                cols: col_left..(col_left + body_cols),
+                center_col: plot.x + time.index_to_center_col(vi),
+                body_top_row: scale.price_to_row_f64(candle.body_top()),
+                body_bottom_row: scale.price_to_row_f64(candle.body_bottom()),
+                high_row: scale.price_to_row_f64(candle.high),
+                low_row: scale.price_to_row_f64(candle.low),
+                body: self.body_color(candle),
+                wick: self.wick_color(candle),
+                bg,
+            };
+            rasterizer.draw_candle(buf, plot, &marks);
+        }
     }
 }
 

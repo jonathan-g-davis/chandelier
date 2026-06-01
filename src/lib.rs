@@ -36,10 +36,12 @@
 mod axis;
 mod block;
 mod chart;
+mod render;
 mod scale;
 mod series;
 
 pub use axis::{PriceAxis, TimeAxis};
 pub use chart::CandlestickChart;
+pub use render::PlotLayout;
 pub use scale::{PriceScale, TimeScale};
 pub use series::{Candle, CandleSeries, price_bounds};

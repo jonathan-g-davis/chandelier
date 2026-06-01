@@ -24,6 +24,21 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier};
 
+use crate::render::Rasterizer;
+
+/// Eighth-block rasterizer backend.
+///
+/// Quantizes a candle's fractional rows to eighths (bodies) and halves (wick
+/// tips) and paints them with the block and vertical-line glyphs.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Block;
+
+impl Rasterizer for Block {
+    fn draw_candle(&self, buf: &mut Buffer, plot: Rect, marks: &CandleMarks) {
+        draw_candle(buf, plot, marks);
+    }
+}
+
 /// Vertical sub-cell steps per terminal row (one eighth-block each).
 const EIGHTHS_PER_ROW: u32 = 8;
 

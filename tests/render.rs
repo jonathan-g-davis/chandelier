@@ -198,6 +198,40 @@ fn partial_bodies_render_over_a_transparent_background() {
     assert!(saw_partial, "expected at least one partial body cell");
 }
 
+#[test]
+fn candle_glyph_grid_is_stable() {
+    // Small test chart to prevent rendering regression.
+    let candles = [
+        Candle::new(100.0, 106.0, 99.0, 105.0),
+        Candle::new(105.0, 109.0, 104.0, 104.5),
+        Candle::new(104.5, 105.0, 98.0, 99.0),
+    ];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3).gap(1)).axes(false);
+    let buf = render(&chart, 12, 8);
+
+    let mut grid: Vec<String> = Vec::new();
+    for y in 0..buf.area.height {
+        let mut row = String::new();
+        for x in 0..buf.area.width {
+            row.push_str(buf[(x, y)].symbol());
+        }
+        grid.push(row);
+    }
+
+    let expected = [
+        "     ╷      ",
+        "     │      ",
+        " ╷   │      ",
+        "███ ▅▅▅ ▅▅▅ ",
+        "███     ███ ",
+        "███     ███ ",
+        "▅▅▅     ███ ",
+        " ╵       │  ",
+    ];
+
+    assert_eq!(grid, expected);
+}
+
 /// The truecolor SGR prefix for a cell's foreground and background, so the dump
 /// reflects fg/bg-inverted cells (a body lit from the top is inverted).
 fn sgr(fg: Color, bg: Color) -> String {

@@ -6,9 +6,10 @@ use ratatui_core::style::{Color, Style, Styled};
 use ratatui_core::widgets::Widget;
 
 use crate::axis::{self, PriceAxis, TimeAxis};
-use crate::block::{self, CandleMarks};
+use crate::block::Block;
+use crate::render::{PlotLayout, Series};
 use crate::scale::{PriceScale, TimeScale};
-use crate::series::{CandleSeries, price_bounds};
+use crate::series::CandleSeries;
 
 /// A candlestick chart: a [`CandleSeries`] drawn with a [`PriceAxis`] and a
 /// [`TimeAxis`].
@@ -82,8 +83,7 @@ impl<'a> CandlestickChart<'a> {
     }
 
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {
-        let candles = self.series.candles;
-        if area.width == 0 || area.height == 0 || candles.is_empty() {
+        if area.width == 0 || area.height == 0 {
             return;
         }
 
@@ -99,6 +99,25 @@ impl<'a> CandlestickChart<'a> {
             }
         }
 
+        let Some(layout) = self.layout(area, bg) else {
+            return;
+        };
+
+        self.series.draw(buf, &layout, &Block);
+        self.draw_overlays(buf, &layout);
+
+        if self.show_axes {
+            self.draw_price_axis(buf, &layout.price, layout.plot);
+            self.draw_time_axis(buf, &layout.time, layout.plot);
+        }
+    }
+
+    /// Computes the plot rectangle and the price and time scales for `area`.
+    ///
+    /// This is the single place the drawn plot geometry is laid out, so the
+    /// series, the axes, and anything aligning to the same columns and rows all
+    /// share one [`PlotLayout`]. Returns `None` when no plot fits.
+    fn layout(&self, area: Rect, bg: Color) -> Option<PlotLayout> {
         let right_axis_w = if self.show_axes {
             self.price_axis.width
         } else {
@@ -107,7 +126,7 @@ impl<'a> CandlestickChart<'a> {
         let bottom_axis_h = if self.show_axes { 1 } else { 0 };
 
         if area.width <= right_axis_w || area.height <= bottom_axis_h {
-            return;
+            return None;
         }
 
         let plot = Rect {
@@ -117,41 +136,21 @@ impl<'a> CandlestickChart<'a> {
             height: area.height - bottom_axis_h,
         };
 
-        let Some((lo, hi)) = price_bounds(candles) else {
-            return;
-        };
-        let scale = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
-        let time = TimeScale::new(
-            plot.width,
-            candles.len(),
-            self.series.width.max(1),
-            self.series.gap,
-        );
+        let (lo, hi) = self.series.price_bounds()?;
+        let price = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
+        let time = self.series.time_scale(plot);
 
-        for vi in 0..time.visible() {
-            let candle = candles[time.first_visible() + vi];
-            let col_left = plot.x + time.index_to_col(vi);
-            let body_cols = time.candle_width();
-
-            let marks = CandleMarks {
-                cols: col_left..(col_left + body_cols),
-                center_col: plot.x + time.index_to_center_col(vi),
-                body_top_row: scale.price_to_row_f64(candle.body_top()),
-                body_bottom_row: scale.price_to_row_f64(candle.body_bottom()),
-                high_row: scale.price_to_row_f64(candle.high),
-                low_row: scale.price_to_row_f64(candle.low),
-                body: self.series.body_color(candle),
-                wick: self.series.wick_color(candle),
-                bg,
-            };
-            block::draw_candle(buf, plot, &marks);
-        }
-
-        if self.show_axes {
-            self.draw_price_axis(buf, &scale, plot);
-            self.draw_time_axis(buf, &time, plot);
-        }
+        Some(PlotLayout {
+            plot,
+            price,
+            time,
+            bg,
+        })
     }
+
+    /// Draws anything layered on top of the series, after it and before the
+    /// axes. Overlays align to `layout`'s scales. There are none by default.
+    fn draw_overlays(&self, _buf: &mut Buffer, _layout: &PlotLayout) {}
 
     fn draw_price_axis(&self, buf: &mut Buffer, scale: &PriceScale, plot: Rect) {
         let ticks = axis::price_ticks(scale.min(), scale.max(), 6);
