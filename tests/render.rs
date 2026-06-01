@@ -303,6 +303,72 @@ fn braille_marker_renders_braille_cells_for_a_known_candle() {
     );
 }
 
+#[test]
+fn quadrant_marker_renders_quadrant_and_box_glyphs() {
+    // A two-column candle drawn with the quadrant marker: its body fills both
+    // columns with block glyphs (a full body cell is █) and the wick runs in the
+    // candle's center column above and below the body using the block line
+    // glyphs.
+    let candles = [Candle::new(100.0, 130.0, 70.0, 110.0)];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(2.0).gap(0.0))
+        .axes(false)
+        .marker(Marker::Quadrant);
+    let buf = render(&chart, 2, 8);
+
+    let grid = glyph_grid(&buf);
+
+    // Only block/quadrant body glyphs, box-drawing wick glyphs, or blanks appear.
+    let allowed = [
+        " ", "█", "▀", "▄", "▌", "▐", "▘", "▝", "▖", "▗", "│", "╵", "╷",
+    ];
+    for row in &grid {
+        for c in row.chars() {
+            assert!(
+                allowed.contains(&c.to_string().as_str()),
+                "quadrant marker emitted an unexpected glyph {c:?}"
+            );
+        }
+    }
+
+    let symbols: String = grid.concat();
+    assert!(
+        symbols.contains('█'),
+        "a full body cell (█) should appear, got grid {grid:?}"
+    );
+    // The wick reaches above the body in the center (right) column only, so the
+    // top-left cell stays blank while the top-right carries the wick tip.
+    assert_eq!(
+        &grid[0], " ╷",
+        "wick tip in the center column above the body"
+    );
+}
+
+#[test]
+fn quadrant_hollow_body_uses_a_box_outline() {
+    // The quadrant marker hollows a body with a box-drawing outline, so a hollow
+    // body emits corner and line glyphs the filled body never does.
+    let bull = Color::Rgb(0, 200, 120);
+    let candles = [Candle::new(100.0, 112.0, 98.0, 110.0)]; // bull
+    let series = CandleSeries::new(&candles)
+        .width(5.0)
+        .bull_style(bull)
+        .bull_fill(BodyFill::Hollow);
+    let chart = CandlestickChart::new(series)
+        .axes(false)
+        .marker(Marker::Quadrant);
+    let buf = render(&chart, 8, 12);
+
+    let symbols: String = glyph_grid(&buf).concat();
+    assert!(
+        symbols.contains('┌') && symbols.contains('┐'),
+        "a hollow quadrant body should draw box-drawing corners, got {symbols:?}"
+    );
+    assert!(
+        symbols.contains('└') && symbols.contains('┘'),
+        "a hollow quadrant body should draw bottom corners, got {symbols:?}"
+    );
+}
+
 /// Counts cells painted in `color` (ignoring blanks), the body footprint.
 fn body_cells(buf: &Buffer, color: Color) -> usize {
     buf.content()

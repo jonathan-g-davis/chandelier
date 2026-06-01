@@ -2,27 +2,22 @@
 //!
 //! A candle arrives as fractional row positions (from the price scale) plus the
 //! colors to paint it in. This module owns everything specific to the block
-//! character set: quantizing a row to one of eight vertical steps, the
-//! foreground/background inversion that lets a body edge land between two rows,
-//! and the line glyph used for wicks.
+//! character set: quantizing a row to one of eight vertical steps and the
+//! foreground/background inversion that lets a body edge land between two rows.
+//! Wicks are drawn by the shared [`wick`](crate::wick) module.
 //!
-//! Two properties are worth stating because they bound what the block set can
-//! draw truthfully:
-//!
-//! - A body confined to a single row that touches neither the top nor the
-//!   bottom of that cell is drawn flush to the cell bottom. Block glyphs fill
-//!   from the bottom or from the top by inversion, but cannot float a segment
-//!   in the middle of a cell. A body is never shorter than one eighth, so it
-//!   always remains visible.
-//! - Body endpoints resolve to an eighth of a row, wick endpoints to a half. A
-//!   wick uses the vertical line glyphs `│`, `╵`, and `╷`, so its tip can land
-//!   on a half-row boundary rather than snapping to a whole row.
+//! A body confined to a single row that touches neither the top nor the bottom
+//! of that cell is drawn flush to the cell bottom. Block glyphs fill from the
+//! bottom or from the top by inversion, but cannot float a segment in the middle
+//! of a cell. A body is never shorter than one eighth, so it always remains
+//! visible. Body endpoints resolve to an eighth of a row.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier};
 
 use crate::render::{BodyFill, CandleGeometry, Rasterizer};
+use crate::wick;
 
 /// Eighth-block rasterizer backend.
 ///
@@ -40,9 +35,6 @@ impl Rasterizer for Block {
 /// Vertical sub-cell steps per terminal row (one eighth-block each).
 const EIGHTHS_PER_ROW: u32 = 8;
 
-/// Vertical steps per terminal row a wick tip resolves to (`│`, `╵`, `╷`).
-const HALVES_PER_ROW: u32 = 2;
-
 /// Eighth-block fills indexed by how many eighths are lit from the bottom of the
 /// cell (`0` is empty, `8` is full).
 const EIGHTHS: [&str; 9] = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
@@ -58,12 +50,10 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
         body_right,
         body_top_row,
         body_bottom_row,
-        high_row,
-        low_row,
         body,
-        wick,
         bg,
         fill,
+        ..
     } = *geometry;
 
     let max_sub = u32::from(plot.height) * EIGHTHS_PER_ROW;
@@ -82,18 +72,9 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     let row_top = top_sub / EIGHTHS_PER_ROW;
     let row_bot = (bot_sub - 1) / EIGHTHS_PER_ROW;
 
-    // Wicks reach from the body out to the high and low. A tip resolves to half
-    // a row using the half-height vertical glyphs, so a high or low that lands
-    // mid-cell is not snapped to a whole row.
-    let last_half = u32::from(plot.height) * HALVES_PER_ROW - 1;
-    let high_half = (high_row * HALVES_PER_ROW as f64).round() as u32;
-    let low_half = ((low_row * HALVES_PER_ROW as f64).round() as u32).min(last_half);
-
-    // The wick runs along the whole column nearest the body's center.
-    let center_col = plot.x + (geometry.center() - 0.5).round() as u16;
-
-    draw_upper_wick(buf, plot, center_col, high_half, row_top, wick, bg);
-    draw_lower_wick(buf, plot, center_col, low_half, row_bot, wick, bg);
+    // Wicks reach from the body out to the high and low, drawn with vertical
+    // line glyphs at half-row tip resolution.
+    wick::draw(buf, plot, geometry, row_top, row_bot);
 
     // Body edges to the nearest whole column, at least one column wide.
     let left_col = plot.x + body_left.round() as u16;
@@ -186,92 +167,6 @@ fn set_body_cell(buf: &mut Buffer, x: u16, y: u16, a: u16, b: u16, fill: Color, 
         } else {
             cell.modifier.remove(Modifier::REVERSED);
         }
-    }
-}
-
-/// Draws the wick above the body, from the body's top cell up to `high_half`
-/// (a half-row position from the plot top). The tip cell is the lower-half glyph
-/// `╷` when the high lands on a half-row boundary, otherwise a full `│`.
-fn draw_upper_wick(
-    buf: &mut Buffer,
-    plot: Rect,
-    center_col: u16,
-    high_half: u32,
-    row_top: u32,
-    fg: Color,
-    bg: Color,
-) {
-    let body_edge = row_top * HALVES_PER_ROW;
-    if high_half >= body_edge {
-        return;
-    }
-
-    let tip = high_half / HALVES_PER_ROW;
-
-    if !high_half.is_multiple_of(HALVES_PER_ROW) {
-        // The high reaches only the lower half of the tip cell.
-        set_wick(buf, plot, center_col, tip, "╷", fg, bg);
-        for r in (tip + 1)..row_top {
-            set_wick(buf, plot, center_col, r, "│", fg, bg);
-        }
-    } else {
-        for r in tip..row_top {
-            set_wick(buf, plot, center_col, r, "│", fg, bg);
-        }
-    }
-}
-
-/// Draws the wick below the body, from the body's bottom cell down to
-/// `low_half`. The tip cell is the upper-half glyph `╵` when the low lands on a
-/// half-row boundary, otherwise a full `│`.
-fn draw_lower_wick(
-    buf: &mut Buffer,
-    plot: Rect,
-    center_col: u16,
-    low_half: u32,
-    row_bot: u32,
-    fg: Color,
-    bg: Color,
-) {
-    let body_edge = (row_bot + 1) * HALVES_PER_ROW;
-    if low_half < body_edge {
-        return;
-    }
-
-    let tip = low_half / HALVES_PER_ROW;
-
-    for r in (row_bot + 1)..tip {
-        set_wick(buf, plot, center_col, r, "│", fg, bg);
-    }
-
-    if low_half.is_multiple_of(HALVES_PER_ROW) {
-        // The low reaches only the upper half of the tip cell.
-        set_wick(buf, plot, center_col, tip, "╵", fg, bg);
-    } else {
-        set_wick(buf, plot, center_col, tip, "│", fg, bg);
-    }
-}
-
-/// Draws a wick glyph at `center_col`, row `r` of `plot`.
-fn set_wick(
-    buf: &mut Buffer,
-    plot: Rect,
-    center_col: u16,
-    r: u32,
-    symbol: &str,
-    fg: Color,
-    bg: Color,
-) {
-    if center_col >= plot.x + plot.width {
-        return;
-    }
-
-    let y = plot.y + r as u16;
-
-    if let Some(cell) = buf.cell_mut((center_col, y)) {
-        cell.set_symbol(symbol);
-        cell.fg = fg;
-        cell.bg = bg;
     }
 }
 
