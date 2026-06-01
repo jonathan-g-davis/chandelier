@@ -1,7 +1,7 @@
 //! Renders charts into an in-memory buffer and asserts what lands on the grid.
 //! This verifies the renderer without an interactive terminal.
 
-use chandelier::{Candle, CandleSeries, CandlestickChart, PriceAxis, TimeAxis};
+use chandelier::{Candle, CandleSeries, CandlestickChart, Marker, PriceAxis, TimeAxis};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
@@ -230,6 +230,74 @@ fn candle_glyph_grid_is_stable() {
     ];
 
     assert_eq!(grid, expected);
+}
+
+/// The full symbol grid of a buffer, one string per row.
+fn glyph_grid(buf: &Buffer) -> Vec<String> {
+    let mut grid: Vec<String> = Vec::new();
+    for y in 0..buf.area.height {
+        let mut row = String::new();
+        for x in 0..buf.area.width {
+            row.push_str(buf[(x, y)].symbol());
+        }
+        grid.push(row);
+    }
+    grid
+}
+
+#[test]
+fn default_marker_is_block() {
+    // The default chart and an explicit Marker::Block must produce the same grid,
+    // proving Block is the default backend and the selection is byte-for-byte.
+    let candles = [
+        Candle::new(100.0, 106.0, 99.0, 105.0),
+        Candle::new(105.0, 109.0, 104.0, 104.5),
+        Candle::new(104.5, 105.0, 98.0, 99.0),
+    ];
+    let default = CandlestickChart::new(CandleSeries::new(&candles).width(3).gap(1)).axes(false);
+    let explicit = CandlestickChart::new(CandleSeries::new(&candles).width(3).gap(1))
+        .axes(false)
+        .marker(Marker::Block);
+
+    let want = render(&default, 12, 8);
+    let got = render(&explicit, 12, 8);
+    assert_eq!(want.content(), got.content());
+}
+
+#[test]
+fn braille_marker_renders_braille_cells_for_a_known_candle() {
+    // A two-column candle drawn with braille: its body fills both columns with
+    // braille dots (a full body cell is ⣿), and a wick runs in the candle's
+    // center dot column above and below the body.
+    let candles = [Candle::new(100.0, 130.0, 70.0, 110.0)];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(2).gap(0))
+        .axes(false)
+        .marker(Marker::Braille);
+    let buf = render(&chart, 2, 8);
+
+    let grid = glyph_grid(&buf);
+
+    // Only braille (or blank) glyphs are emitted.
+    for row in &grid {
+        for c in row.chars() {
+            assert!(
+                c == ' ' || ('\u{2800}'..='\u{28FF}').contains(&c),
+                "braille marker emitted a non-braille glyph {c:?}"
+            );
+        }
+    }
+
+    let symbols: String = grid.concat();
+    assert!(
+        symbols.contains('\u{28FF}'),
+        "a full braille body cell (⣿) should appear, got grid {grid:?}"
+    );
+    // The wick reaches above the body in the center (right) dot column only, so
+    // the top-left cell stays blank while the top-right carries dots.
+    assert_eq!(
+        &grid[0], " \u{28B0}",
+        "wick in the center dot column above body"
+    );
 }
 
 /// The truecolor SGR prefix for a cell's foreground and background, so the dump

@@ -18,13 +18,11 @@
 //!   wick uses the vertical line glyphs `│`, `╵`, and `╷`, so its tip can land
 //!   on a half-row boundary rather than snapping to a whole row.
 
-use std::ops::Range;
-
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier};
 
-use crate::render::Rasterizer;
+use crate::render::{CandleGeometry, Rasterizer};
 
 /// Eighth-block rasterizer backend.
 ///
@@ -34,8 +32,8 @@ use crate::render::Rasterizer;
 pub(crate) struct Block;
 
 impl Rasterizer for Block {
-    fn draw_candle(&self, buf: &mut Buffer, plot: Rect, marks: &CandleMarks) {
-        draw_candle(buf, plot, marks);
+    fn draw_candle(&self, buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry) {
+        draw_candle(buf, plot, geometry);
     }
 }
 
@@ -49,33 +47,13 @@ const HALVES_PER_ROW: u32 = 2;
 /// cell (`0` is empty, `8` is full).
 const EIGHTHS: [&str; 9] = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 
-/// One candle's geometry and colors, in the rasterizer's own terms.
-///
-/// `cols` is the absolute column range the body spans and `center_col` the
-/// absolute column carrying the wick. The four row fields are fractional rows
-/// measured from the top of the plot (smaller is higher on screen):
-/// `body_top_row`/`body_bottom_row` bound the body, `high_row`/`low_row` the
-/// wicks. `body` paints the body, `wick` the wick, and `bg` is the color the
-/// empty portion of a partially filled cell is drawn against.
-pub(crate) struct CandleMarks {
-    pub cols: Range<u16>,
-    pub center_col: u16,
-    pub body_top_row: f64,
-    pub body_bottom_row: f64,
-    pub high_row: f64,
-    pub low_row: f64,
-    pub body: Color,
-    pub wick: Color,
-    pub bg: Color,
-}
-
 /// Draws one candle into `plot`.
-pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, marks: &CandleMarks) {
+pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry) {
     if plot.width == 0 || plot.height == 0 {
         return;
     }
 
-    let CandleMarks {
+    let CandleGeometry {
         ref cols,
         center_col,
         body_top_row,
@@ -85,7 +63,7 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, marks: &CandleMarks) {
         body,
         wick,
         bg,
-    } = *marks;
+    } = *geometry;
 
     let max_sub = u32::from(plot.height) * EIGHTHS_PER_ROW;
 
@@ -273,8 +251,8 @@ mod tests {
     }
 
     /// A single-column candle at column 0, with the given rows and wick color.
-    fn marks(top: f64, bottom: f64, high: f64, low: f64, wick: Color) -> CandleMarks {
-        CandleMarks {
+    fn geometry(top: f64, bottom: f64, high: f64, low: f64, wick: Color) -> CandleGeometry {
+        CandleGeometry {
             cols: 0..1,
             center_col: 0,
             body_top_row: top,
@@ -293,7 +271,7 @@ mod tests {
         let mut buf = buffer(1, 1);
 
         // A body spanning the whole single row, no wicks.
-        draw_candle(&mut buf, plot, &marks(0.0, 1.0, 0.0, 1.0, WICK));
+        draw_candle(&mut buf, plot, &geometry(0.0, 1.0, 0.0, 1.0, WICK));
 
         let cell = &buf[(0, 0)];
         assert_eq!(cell.symbol(), "█");
@@ -306,7 +284,7 @@ mod tests {
         let mut buf = buffer(1, 1);
 
         // Top half of the cell only (rows 0.0 .. 0.5 => eighths 0..4).
-        draw_candle(&mut buf, plot, &marks(0.0, 0.5, 0.0, 0.5, WICK));
+        draw_candle(&mut buf, plot, &geometry(0.0, 0.5, 0.0, 0.5, WICK));
 
         let cell = &buf[(0, 0)];
         assert!(is_partial(cell.symbol()), "got {:?}", cell.symbol());
@@ -324,7 +302,7 @@ mod tests {
         let mut buf = buffer(1, 1);
 
         // Top half of the cell, with a Reset (terminal default) empty color.
-        let marks = CandleMarks {
+        let geometry = CandleGeometry {
             cols: 0..1,
             center_col: 0,
             body_top_row: 0.0,
@@ -335,7 +313,7 @@ mod tests {
             wick: WICK,
             bg: Color::Reset,
         };
-        draw_candle(&mut buf, plot, &marks);
+        draw_candle(&mut buf, plot, &geometry);
 
         // The body stays in the foreground and Reset in the background, with
         // REVERSED. The terminal resolves Reset to its real background and swaps,
@@ -353,7 +331,7 @@ mod tests {
         let mut buf = buffer(1, 1);
 
         // Bottom half of the cell (rows 0.5 .. 1.0 => eighths 4..8).
-        draw_candle(&mut buf, plot, &marks(0.5, 1.0, 0.5, 1.0, WICK));
+        draw_candle(&mut buf, plot, &geometry(0.5, 1.0, 0.5, 1.0, WICK));
 
         let cell = &buf[(0, 0)];
         assert!(is_partial(cell.symbol()), "got {:?}", cell.symbol());
@@ -371,7 +349,7 @@ mod tests {
 
         // Body top has a partial edge in row 1 (top_sub 12 => a == 4); a high
         // above it puts a wick in row 0 that floats free of the body.
-        draw_candle(&mut buf, plot, &marks(1.5, 3.0, 0.0, 4.0, WICK));
+        draw_candle(&mut buf, plot, &geometry(1.5, 3.0, 0.0, 4.0, WICK));
 
         // Row 0 carries the wick.
         assert_eq!(buf[(0, 0)].symbol(), "│");
@@ -393,7 +371,7 @@ mod tests {
 
         // Body in row 0; the low sits at row 2.0 (a half-row boundary), so the
         // tip cell (row 2) shows only its upper half.
-        draw_candle(&mut buf, plot, &marks(0.0, 1.0, 0.0, 2.0, WICK));
+        draw_candle(&mut buf, plot, &geometry(0.0, 1.0, 0.0, 2.0, WICK));
 
         assert_eq!(buf[(0, 1)].symbol(), "│", "full wick cell below the body");
         assert_eq!(buf[(0, 2)].symbol(), "╵", "half-row tip at the low");
@@ -407,7 +385,7 @@ mod tests {
 
         // Body in row 3; the high sits at row 2.5 (a half-row boundary), so the
         // tip cell (row 2) shows only its lower half.
-        draw_candle(&mut buf, plot, &marks(3.0, 4.0, 2.5, 4.0, WICK));
+        draw_candle(&mut buf, plot, &geometry(3.0, 4.0, 2.5, 4.0, WICK));
 
         assert_eq!(buf[(0, 2)].symbol(), "╷", "half-row tip at the high");
         assert_eq!(buf[(0, 2)].fg, WICK);

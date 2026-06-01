@@ -35,13 +35,16 @@
 
 mod axis;
 mod block;
+mod braille;
 mod chart;
+mod marker;
 mod render;
 mod scale;
 mod series;
 
 pub use axis::{PriceAxis, TimeAxis};
 pub use chart::CandlestickChart;
+pub use marker::Marker;
 pub use render::PlotLayout;
 pub use scale::{PriceScale, TimeScale};
 pub use series::{Candle, CandleSeries, price_bounds};

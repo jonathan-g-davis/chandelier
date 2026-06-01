@@ -3,11 +3,12 @@
 //! Chart containers compute plot layouts, series generate geometry, and
 //! rendering backends quantize it to a glyph family.
 
+use std::ops::Range;
+
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 
-use crate::block::CandleMarks;
 use crate::scale::{PriceScale, TimeScale};
 
 /// The laid-out plot area together with the scales mapping data onto it.
@@ -26,13 +27,40 @@ pub struct PlotLayout {
     pub bg: Color,
 }
 
+/// One candle's geometry and colors.
+///
+/// Geometry is defined in terms of plot area, not a specific glyph family.
+/// `cols` is the absolute column range the body spans and `center_col` the
+/// absolute column carrying the wick. The four row fields are fractional rows
+/// measured from the top of the plot (smaller is higher on screen).
+pub(crate) struct CandleGeometry {
+    /// The absolute column range the body spans.
+    pub cols: Range<u16>,
+    /// The absolute column carrying the wick.
+    pub center_col: u16,
+    /// The fractional row of the top of the body.
+    pub body_top_row: f64,
+    /// The fractional row of the bottom of the body.
+    pub body_bottom_row: f64,
+    /// The fractional row of the high wick.
+    pub high_row: f64,
+    /// The fractional row of the low wick.
+    pub low_row: f64,
+    /// The color of the body.
+    pub body: Color,
+    /// The color of the wick.
+    pub wick: Color,
+    /// The color the empty portion of a partially filled cell is painted.
+    pub bg: Color,
+}
+
 /// A backend that paints fractional-row geometry into terminal cells.
 ///
 /// Receives raster geometry and the backend quantizes it to the vertical
 /// resolution of its glyphs.
 pub(crate) trait Rasterizer {
     /// Draws one candle's geometry into `plot`.
-    fn draw_candle(&self, buf: &mut Buffer, plot: Rect, marks: &CandleMarks);
+    fn draw_candle(&self, buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry);
 }
 
 /// A dataset that knows how to draw itself into a laid-out plot.

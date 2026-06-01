@@ -7,8 +7,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
 
-use crate::block::CandleMarks;
-use crate::render::{PlotLayout, Rasterizer, Series};
+use crate::render::{CandleGeometry, PlotLayout, Rasterizer, Series};
 use crate::scale::TimeScale;
 
 /// A single open/high/low/close bar.
@@ -181,7 +180,7 @@ impl Series for CandleSeries<'_> {
             let col_left = plot.x + time.index_to_col(vi);
             let body_cols = time.candle_width();
 
-            let marks = CandleMarks {
+            let geometry = CandleGeometry {
                 cols: col_left..(col_left + body_cols),
                 center_col: plot.x + time.index_to_center_col(vi),
                 body_top_row: scale.price_to_row_f64(candle.body_top()),
@@ -192,7 +191,7 @@ impl Series for CandleSeries<'_> {
                 wick: self.wick_color(candle),
                 bg,
             };
-            rasterizer.draw_candle(buf, plot, &marks);
+            rasterizer.draw_candle(buf, plot, &geometry);
         }
     }
 }
