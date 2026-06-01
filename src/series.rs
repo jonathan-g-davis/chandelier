@@ -7,7 +7,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
 
-use crate::render::{CandleGeometry, PlotLayout, Rasterizer, Series};
+use crate::render::{BodyFill, CandleGeometry, PlotLayout, Rasterizer, Series};
 use crate::scale::TimeScale;
 
 /// A single open/high/low/close bar.
@@ -85,6 +85,8 @@ pub struct CandleSeries<'a> {
     bull: Style,
     bear: Style,
     wick: Option<Style>,
+    bull_fill: BodyFill,
+    bear_fill: BodyFill,
     pub(crate) width: f64,
     pub(crate) gap: f64,
 }
@@ -98,6 +100,8 @@ impl<'a> CandleSeries<'a> {
             bull: Style::new().fg(Color::Green),
             bear: Style::new().fg(Color::Red),
             wick: None,
+            bull_fill: BodyFill::Filled,
+            bear_fill: BodyFill::Filled,
             width: 3.0,
             gap: 1.0,
         }
@@ -124,6 +128,30 @@ impl<'a> CandleSeries<'a> {
     #[must_use]
     pub fn wick_style(mut self, style: impl Into<Style>) -> Self {
         self.wick = Some(style.into());
+        self
+    }
+
+    /// Sets the fill style for both directions.
+    #[must_use]
+    pub fn fill(mut self, fill: BodyFill) -> Self {
+        self.bull_fill = fill;
+        self.bear_fill = fill;
+        self
+    }
+
+    /// Sets how bull (close at or above open) bodies are filled. Defaults to
+    /// [`BodyFill::Filled`].
+    #[must_use]
+    pub fn bull_fill(mut self, fill: BodyFill) -> Self {
+        self.bull_fill = fill;
+        self
+    }
+
+    /// Sets how bear (close below open) bodies are filled. Defaults to
+    /// [`BodyFill::Filled`].
+    #[must_use]
+    pub fn bear_fill(mut self, fill: BodyFill) -> Self {
+        self.bear_fill = fill;
         self
     }
 
@@ -162,6 +190,15 @@ impl<'a> CandleSeries<'a> {
             .and_then(|w| w.fg)
             .unwrap_or_else(|| self.body_color(candle))
     }
+
+    /// The fill style for a candle, chosen by its direction.
+    pub(crate) fn body_fill(&self, candle: Candle) -> BodyFill {
+        if candle.is_bullish() {
+            self.bull_fill
+        } else {
+            self.bear_fill
+        }
+    }
 }
 
 impl Series for CandleSeries<'_> {
@@ -193,6 +230,7 @@ impl Series for CandleSeries<'_> {
                 body: self.body_color(candle),
                 wick: self.wick_color(candle),
                 bg,
+                fill: self.body_fill(candle),
             };
             rasterizer.draw_candle(buf, plot, &geometry);
         }
@@ -247,6 +285,24 @@ mod tests {
         assert_eq!(series.gap, 1.0);
         assert_eq!(series.body_color(candles[0]), Color::Green);
         assert_eq!(series.body_color(candles[1]), Color::Red);
+    }
+
+    #[test]
+    fn body_fill_defaults_to_filled_and_is_chosen_per_direction() {
+        let candles = [
+            Candle::new(100.0, 110.0, 99.0, 108.0), // bull
+            Candle::new(108.0, 109.0, 95.0, 96.0),  // bear
+        ];
+
+        let default = CandleSeries::new(&candles);
+        assert_eq!(default.body_fill(candles[0]), BodyFill::Filled);
+        assert_eq!(default.body_fill(candles[1]), BodyFill::Filled);
+
+        let series = CandleSeries::new(&candles)
+            .bull_fill(BodyFill::Hollow)
+            .bear_fill(BodyFill::Filled);
+        assert_eq!(series.body_fill(candles[0]), BodyFill::Hollow);
+        assert_eq!(series.body_fill(candles[1]), BodyFill::Filled);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Renders charts into an in-memory buffer and asserts what lands on the grid.
 //! This verifies the renderer without an interactive terminal.
 
-use chandelier::{Candle, CandleSeries, CandlestickChart, Marker, PriceAxis, TimeAxis};
+use chandelier::{BodyFill, Candle, CandleSeries, CandlestickChart, Marker, PriceAxis, TimeAxis};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
@@ -300,6 +300,52 @@ fn braille_marker_renders_braille_cells_for_a_known_candle() {
     assert_eq!(
         &grid[0], " \u{2846}",
         "wick in the center dot column above body"
+    );
+}
+
+/// Counts cells painted in `color` (ignoring blanks), the body footprint.
+fn body_cells(buf: &Buffer, color: Color) -> usize {
+    buf.content()
+        .iter()
+        .filter(|cell| cell.symbol() != " " && cell.fg == color)
+        .count()
+}
+
+#[test]
+fn fill_style_is_applied_per_direction() {
+    // The default block marker hollows a body by clearing its interior cells,
+    // leaving an eighth-block border. A hollow body therefore paints strictly
+    // fewer body cells than the same body filled. The two directions are set
+    // independently on the series.
+    let bull = Color::Rgb(0, 200, 120);
+    let bear = Color::Rgb(220, 60, 60);
+    let candles = [
+        Candle::new(100.0, 112.0, 98.0, 110.0), // bull
+        Candle::new(110.0, 111.0, 90.0, 92.0),  // bear
+    ];
+    let series = CandleSeries::new(&candles)
+        .width(5.0)
+        .gap(1.0)
+        .bull_style(bull)
+        .bear_style(bear);
+
+    let filled = render(&CandlestickChart::new(series.clone()).axes(false), 16, 12);
+    let hollowed = render(
+        &CandlestickChart::new(series.bull_fill(BodyFill::Hollow)).axes(false),
+        16,
+        12,
+    );
+
+    // Hollowing only the bull body removes interior cells.
+    assert!(
+        body_cells(&hollowed, bull) < body_cells(&filled, bull),
+        "a hollow bull body should paint fewer body cells than a filled one"
+    );
+    // The bear body is left filled.
+    assert_eq!(
+        body_cells(&hollowed, bear),
+        body_cells(&filled, bear),
+        "the filled bear body should be unchanged"
     );
 }
 

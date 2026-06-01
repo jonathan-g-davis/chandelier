@@ -12,7 +12,7 @@ use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 use ratatui_core::symbols::braille::BRAILLE;
 
-use crate::render::{CandleGeometry, Rasterizer};
+use crate::render::{BodyFill, CandleGeometry, Rasterizer};
 
 /// Braille-dot rasterizer backend.
 ///
@@ -59,6 +59,7 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
         body,
         wick,
         bg,
+        fill,
     } = *geometry;
 
     let max_dot_y = u32::from(plot.height) * DOTS_Y;
@@ -108,14 +109,20 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     }
 
     // The body fills every dot column it spans. Pushed after the wick so a
-    // shared cell takes the body color.
+    // shared cell takes the body color. A hollow body lights only its border
+    // dots; a body too small to have an interior renders solid.
+    let hollow = fill == BodyFill::Hollow;
     for dot_x in left_dot..right_dot {
         for y in top_dot..bot_dot {
-            dots.push(Dot {
-                x: dot_x,
-                y,
-                color: body,
-            });
+            let on_border =
+                dot_x == left_dot || dot_x + 1 == right_dot || y == top_dot || y + 1 == bot_dot;
+            if !hollow || on_border {
+                dots.push(Dot {
+                    x: dot_x,
+                    y,
+                    color: body,
+                });
+            }
         }
     }
 
@@ -183,6 +190,7 @@ mod tests {
             body: BODY,
             wick: WICK,
             bg: BG,
+            fill: BodyFill::Filled,
         }
     }
 
@@ -231,6 +239,62 @@ mod tests {
         // Right dot column lit across all four dot rows: bits 1,3,5,7.
         let expected = (1 << 1) | (1 << 3) | (1 << 5) | (1 << 7);
         assert_eq!(top.symbol(), BRAILLE[expected].to_string());
+    }
+
+    #[test]
+    fn hollow_body_lights_only_its_border_dots() {
+        let plot = Rect::new(0, 0, 2, 1);
+        let mut buf = buffer(2, 1);
+
+        // A two-column, full-height body. The dot grid is 4 wide by 4 tall, so a
+        // hollow body has an interior to clear.
+        let geometry = CandleGeometry {
+            body_left: 0.0,
+            body_right: 2.0,
+            body_top_row: 0.0,
+            body_bottom_row: 1.0,
+            high_row: 0.0,
+            low_row: 1.0,
+            body: BODY,
+            wick: WICK,
+            bg: BG,
+            fill: BodyFill::Hollow,
+        };
+        draw_candle(&mut buf, plot, &geometry);
+
+        // Left cell: the left dot column is fully lit (border) and the inner dot
+        // column lit only at the top and bottom rows. Bits 3 and 5, the two
+        // interior dots, stay dark.
+        let left = &buf[(0, 0)];
+        assert_eq!(left.symbol(), BRAILLE[0b1101_0111].to_string());
+        assert_eq!(left.fg, BODY);
+    }
+
+    #[test]
+    fn hollow_falls_back_to_filled_when_a_single_column_has_no_interior() {
+        let plot = Rect::new(0, 0, 1, 1);
+        let geometry = |fill| CandleGeometry {
+            body_left: 0.0,
+            body_right: 1.0,
+            body_top_row: 0.0,
+            body_bottom_row: 1.0,
+            high_row: 0.0,
+            low_row: 1.0,
+            body: BODY,
+            wick: WICK,
+            bg: BG,
+            fill,
+        };
+
+        let mut filled = buffer(1, 1);
+        draw_candle(&mut filled, plot, &geometry(BodyFill::Filled));
+        let mut hollow = buffer(1, 1);
+        draw_candle(&mut hollow, plot, &geometry(BodyFill::Hollow));
+
+        // One column is two dots wide: every dot is a left or right border, so a
+        // hollow body renders the same solid glyph as a filled one.
+        assert_eq!(hollow[(0, 0)].symbol(), filled[(0, 0)].symbol());
+        assert_eq!(filled[(0, 0)].symbol(), "\u{28FF}");
     }
 
     #[test]
