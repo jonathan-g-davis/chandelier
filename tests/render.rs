@@ -344,9 +344,10 @@ fn quadrant_marker_renders_quadrant_and_box_glyphs() {
 }
 
 #[test]
-fn quadrant_hollow_body_uses_a_box_outline() {
-    // The quadrant marker hollows a body with a box-drawing outline, so a hollow
-    // body emits corner and line glyphs the filled body never does.
+fn quadrant_hollow_body_traces_a_sub_cell_border() {
+    // The quadrant marker hollows a body by lighting only its border sub-cells,
+    // the same way the braille backend does. The ring's corners are quadrant
+    // block glyphs the filled body never emits, and its interior is cleared.
     let bull = Color::Rgb(0, 200, 120);
     let candles = [Candle::new(100.0, 112.0, 98.0, 110.0)]; // bull
     let series = CandleSeries::new(&candles)
@@ -360,12 +361,16 @@ fn quadrant_hollow_body_uses_a_box_outline() {
 
     let symbols: String = glyph_grid(&buf).concat();
     assert!(
-        symbols.contains('┌') && symbols.contains('┐'),
-        "a hollow quadrant body should draw box-drawing corners, got {symbols:?}"
+        symbols.contains('▛') && symbols.contains('▜'),
+        "a hollow quadrant body should draw quadrant-block top corners, got {symbols:?}"
     );
     assert!(
-        symbols.contains('└') && symbols.contains('┘'),
-        "a hollow quadrant body should draw bottom corners, got {symbols:?}"
+        symbols.contains('▙') && symbols.contains('▟'),
+        "a hollow quadrant body should draw quadrant-block bottom corners, got {symbols:?}"
+    );
+    assert!(
+        !symbols.contains('█'),
+        "a hollow body wide and tall enough to enclose an interior has no solid cells, got {symbols:?}"
     );
 }
 

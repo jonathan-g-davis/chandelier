@@ -26,9 +26,11 @@ pub enum Marker {
     /// Braille show replacement glyphs instead of dots.
     Braille,
     /// Quadrant and half-block glyphs (`█`, `▀`, `▄`, `▌`, `▝`, ...), a 2x2 grid
-    /// per cell. Filled bodies resolve to a half row; hollow bodies are drawn as
-    /// a single-line box outline (`┌─┐`). Wick tips resolve to a half row, as
-    /// with [`Block`](Self::Block).
+    /// per cell. This doubles both the vertical and horizontal resolution, with
+    /// one color per cell, so bodies resolve to a half row and a half column like
+    /// braille. A hollow body lights only the border sub-cells of the same
+    /// footprint, so it is an outline of exactly the size of the filled body.
+    /// Wick tips resolve to a half row, as with [`Block`](Self::Block).
     Quadrant,
 }
 
