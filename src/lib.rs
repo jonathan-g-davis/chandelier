@@ -45,6 +45,6 @@ mod series;
 pub use axis::{PriceAxis, TimeAxis};
 pub use chart::CandlestickChart;
 pub use marker::Marker;
-pub use render::PlotLayout;
+pub use render::{BodyFill, PlotLayout};
 pub use scale::{PriceScale, TimeScale};
 pub use series::{Candle, CandleSeries, price_bounds};

@@ -22,7 +22,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier};
 
-use crate::render::{CandleGeometry, Rasterizer};
+use crate::render::{BodyFill, CandleGeometry, Rasterizer};
 
 /// Eighth-block rasterizer backend.
 ///
@@ -63,6 +63,7 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
         body,
         wick,
         bg,
+        fill,
     } = *geometry;
 
     let max_sub = u32::from(plot.height) * EIGHTHS_PER_ROW;
@@ -115,6 +116,39 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
         for cx in left_col..col_end {
             set_body_cell(buf, cx, y, a as u16, b as u16, body, bg);
+        }
+    }
+
+    // A hollow body is the filled body with its interior cleared, leaving a
+    // one-cell-thick border drawn in the same eighth-block glyphs. The body must
+    // be at least three columns wide so an interior column exists between the
+    // side walls; narrower bodies (and those too short to leave an interior row)
+    // have nothing to clear and stay solid.
+    if fill == BodyFill::Hollow && col_end.saturating_sub(left_col) >= 3 {
+        clear_body_interior(buf, plot, left_col, col_end, row_top, row_bot, bg);
+    }
+}
+
+/// Clears the cells strictly inside the body border (columns `[x_start, x_end)`,
+/// rows `row_top..=row_bot`) to `bg`, hollowing a filled body.
+fn clear_body_interior(
+    buf: &mut Buffer,
+    plot: Rect,
+    x_start: u16,
+    x_end: u16,
+    row_top: u32,
+    row_bot: u32,
+    bg: Color,
+) {
+    for row in (row_top + 1)..row_bot {
+        let y = plot.y + row as u16;
+        for x in (x_start + 1)..(x_end - 1) {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ");
+                cell.fg = bg;
+                cell.bg = bg;
+                cell.modifier.remove(Modifier::REVERSED);
+            }
         }
     }
 }
@@ -271,6 +305,7 @@ mod tests {
             body: BODY,
             wick,
             bg: BG,
+            fill: BodyFill::Filled,
         }
     }
 
@@ -321,6 +356,7 @@ mod tests {
             body: BODY,
             wick: WICK,
             bg: Color::Reset,
+            fill: BodyFill::Filled,
         };
         draw_candle(&mut buf, plot, &geometry);
 
@@ -399,5 +435,59 @@ mod tests {
         assert_eq!(buf[(0, 2)].symbol(), "╷", "half-row tip at the high");
         assert_eq!(buf[(0, 2)].fg, WICK);
         assert_eq!(buf[(0, 3)].symbol(), "█", "solid body cell");
+    }
+
+    /// A candle at columns `[x0, x1)` spanning the given rows, hollow.
+    fn hollow(x0: u16, x1: u16, top: f64, bottom: f64) -> CandleGeometry {
+        CandleGeometry {
+            body_left: f64::from(x0),
+            body_right: f64::from(x1),
+            body_top_row: top,
+            body_bottom_row: bottom,
+            high_row: top,
+            low_row: bottom,
+            body: BODY,
+            wick: WICK,
+            bg: BG,
+            fill: BodyFill::Hollow,
+        }
+    }
+
+    #[test]
+    fn hollow_body_keeps_an_eighth_block_border_and_clears_the_interior() {
+        let plot = Rect::new(0, 0, 3, 3);
+        let mut buf = buffer(3, 3);
+
+        // A three-wide, full-height body.
+        draw_candle(&mut buf, plot, &hollow(0, 3, 0.0, 3.0));
+
+        // The border is solid eighth blocks, not box-drawing glyphs.
+        for x in 0..3 {
+            assert_eq!(buf[(x, 0)].symbol(), "█", "top border at {x}");
+            assert_eq!(buf[(x, 2)].symbol(), "█", "bottom border at {x}");
+        }
+        assert_eq!(buf[(0, 1)].symbol(), "█", "left wall");
+        assert_eq!(buf[(2, 1)].symbol(), "█", "right wall");
+        assert_eq!(buf[(0, 0)].fg, BODY);
+
+        // The single interior cell is cleared to the background.
+        assert_eq!(buf[(1, 1)].symbol(), " ");
+        assert_eq!(buf[(1, 1)].bg, BG);
+    }
+
+    #[test]
+    fn hollow_falls_back_to_a_solid_body_below_three_columns() {
+        let plot = Rect::new(0, 0, 2, 3);
+        let mut buf = buffer(2, 3);
+
+        // Two columns are both side walls with no interior between them, so the
+        // body stays solid.
+        draw_candle(&mut buf, plot, &hollow(0, 2, 0.0, 3.0));
+
+        for x in 0..2 {
+            for y in 0..3 {
+                assert_eq!(buf[(x, y)].symbol(), "█", "cell ({x}, {y}) stays solid");
+            }
+        }
     }
 }

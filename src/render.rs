@@ -25,6 +25,26 @@ pub struct PlotLayout {
     pub bg: Color,
 }
 
+/// Whether a candle body is drawn solid or as an outline.
+///
+/// - `Filled` paints the whole body.
+/// - `Hollow` traces the body's border and leaves the interior empty.
+///
+/// A body too small to enclose an interior is drawn filled, depending on the
+/// marker that is used to render the chart.
+///
+/// Set per direction on a [`CandleSeries`](crate::CandleSeries) with
+/// [`bull_fill`](crate::CandleSeries::bull_fill) and
+/// [`bear_fill`](crate::CandleSeries::bear_fill).
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum BodyFill {
+    /// A solid body.
+    #[default]
+    Filled,
+    /// An outlined body with an empty interior.
+    Hollow,
+}
+
 /// One candle's geometry and colors.
 ///
 /// Geometry is defined in terms of plot area, not a specific glyph family. Both
@@ -52,6 +72,8 @@ pub(crate) struct CandleGeometry {
     pub wick: Color,
     /// The color the empty portion of a partially filled cell is painted.
     pub bg: Color,
+    /// Whether the body is solid or an outline.
+    pub fill: BodyFill,
 }
 
 impl CandleGeometry {
