@@ -54,8 +54,8 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     }
 
     let CandleGeometry {
-        ref cols,
-        center_col,
+        body_left,
+        body_right,
         body_top_row,
         body_bottom_row,
         high_row,
@@ -88,10 +88,19 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     let high_half = (high_row * HALVES_PER_ROW as f64).round() as u32;
     let low_half = ((low_row * HALVES_PER_ROW as f64).round() as u32).min(last_half);
 
+    // The wick runs along the whole column nearest the body's center.
+    let center_col = plot.x + (geometry.center() - 0.5).round() as u16;
+
     draw_upper_wick(buf, plot, center_col, high_half, row_top, wick, bg);
     draw_lower_wick(buf, plot, center_col, low_half, row_bot, wick, bg);
 
-    let col_end = cols.end.min(plot.x + plot.width);
+    // Body edges to the nearest whole column, at least one column wide.
+    let left_col = plot.x + body_left.round() as u16;
+    let mut right_col = plot.x + body_right.round() as u16;
+    if right_col <= left_col {
+        right_col = left_col + 1;
+    }
+    let col_end = right_col.min(plot.x + plot.width);
 
     for row in row_top..=row_bot {
         let cell_top = row * EIGHTHS_PER_ROW;
@@ -104,7 +113,7 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
         let y = plot.y + row as u16;
 
-        for cx in cols.start..col_end {
+        for cx in left_col..col_end {
             set_body_cell(buf, cx, y, a as u16, b as u16, body, bg);
         }
     }
@@ -253,8 +262,8 @@ mod tests {
     /// A single-column candle at column 0, with the given rows and wick color.
     fn geometry(top: f64, bottom: f64, high: f64, low: f64, wick: Color) -> CandleGeometry {
         CandleGeometry {
-            cols: 0..1,
-            center_col: 0,
+            body_left: 0.0,
+            body_right: 1.0,
             body_top_row: top,
             body_bottom_row: bottom,
             high_row: high,
@@ -303,8 +312,8 @@ mod tests {
 
         // Top half of the cell, with a Reset (terminal default) empty color.
         let geometry = CandleGeometry {
-            cols: 0..1,
-            center_col: 0,
+            body_left: 0.0,
+            body_right: 1.0,
             body_top_row: 0.0,
             body_bottom_row: 0.5,
             high_row: 0.0,

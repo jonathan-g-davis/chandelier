@@ -38,7 +38,7 @@ const DOTS_Y: u32 = 4;
 /// The color is carried so a later body dot can overwrite an earlier wick dot's
 /// color within the shared cell.
 struct Dot {
-    x: u16,
+    x: u32,
     y: u32,
     color: Color,
 }
@@ -50,8 +50,8 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     }
 
     let CandleGeometry {
-        ref cols,
-        center_col,
+        body_left,
+        body_right,
         body_top_row,
         body_bottom_row,
         high_row,
@@ -62,6 +62,7 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     } = *geometry;
 
     let max_dot_y = u32::from(plot.height) * DOTS_Y;
+    let max_dot_x = u32::from(plot.width) * u32::from(DOTS_X);
 
     // Body endpoints to the nearest dot row, at least one dot tall so a doji
     // still shows a body.
@@ -77,41 +78,44 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     let high_dot = ((high_row * DOTS_Y as f64).round() as u32).min(last_dot_y);
     let low_dot = ((low_row * DOTS_Y as f64).round() as u32).min(last_dot_y);
 
-    let col_end = cols.end.min(plot.x + plot.width);
+    // Body edges to the nearest dot column, at least one dot wide.
+    let left_dot = (body_left * f64::from(DOTS_X)).round() as u32;
+    let mut right_dot = (body_right * f64::from(DOTS_X)).round() as u32;
+    if right_dot <= left_dot {
+        right_dot = left_dot + 1;
+    }
+    let right_dot = right_dot.min(max_dot_x);
 
     let mut dots: Vec<Dot> = Vec::new();
 
-    // The wick runs along the candle's center column, from its high to its low.
-    let center_dot_x = center_col.saturating_mul(DOTS_X) + DOTS_X / 2;
-    if center_col < plot.x + plot.width {
+    // The wick runs up and down the dot column nearest the body's center.
+    let center_dot = (geometry.center() * f64::from(DOTS_X) - 0.5).round() as u32;
+    if center_dot < max_dot_x {
         for y in high_dot..top_dot {
             dots.push(Dot {
-                x: center_dot_x,
+                x: center_dot,
                 y,
                 color: wick,
             });
         }
         for y in bot_dot..=low_dot {
             dots.push(Dot {
-                x: center_dot_x,
+                x: center_dot,
                 y,
                 color: wick,
             });
         }
     }
 
-    // The body fills every dot column across its terminal columns. Pushed after
-    // the wick so a shared cell takes the body color.
-    for cx in cols.start..col_end {
-        for sub in 0..DOTS_X {
-            let dot_x = cx * DOTS_X + sub;
-            for y in top_dot..bot_dot {
-                dots.push(Dot {
-                    x: dot_x,
-                    y,
-                    color: body,
-                });
-            }
+    // The body fills every dot column it spans. Pushed after the wick so a
+    // shared cell takes the body color.
+    for dot_x in left_dot..right_dot {
+        for y in top_dot..bot_dot {
+            dots.push(Dot {
+                x: dot_x,
+                y,
+                color: body,
+            });
         }
     }
 
@@ -124,21 +128,24 @@ fn accumulate(buf: &mut Buffer, plot: Rect, dots: &[Dot], bg: Color) {
     use std::collections::BTreeMap;
 
     // Per cell: the accumulated dot bit-pattern and the last color written.
+    // Cell coordinates are plot-relative; the plot offset is added on write.
     let mut cells: BTreeMap<(u16, u16), (u16, Color)> = BTreeMap::new();
 
     for dot in dots {
-        let cell_x = dot.x / DOTS_X;
+        let cell_x = (dot.x / u32::from(DOTS_X)) as u16;
         let cell_y = (dot.y / DOTS_Y) as u16;
-        if cell_x >= plot.x + plot.width || cell_y >= plot.height {
+        if cell_x >= plot.width || cell_y >= plot.height {
             continue;
         }
 
         // Convert the dot coordinates to the bit position in the braille pattern.
-        let bit_x = dot.x % DOTS_X;
+        let bit_x = dot.x % u32::from(DOTS_X);
         let bit_y = dot.y % DOTS_Y;
-        let bit = 1u16 << (bit_y * u32::from(DOTS_X) + u32::from(bit_x));
+        let bit = 1u16 << (bit_y * u32::from(DOTS_X) + bit_x);
 
-        let entry = cells.entry((cell_x, plot.y + cell_y)).or_insert((0, bg));
+        let entry = cells
+            .entry((plot.x + cell_x, plot.y + cell_y))
+            .or_insert((0, bg));
         entry.0 |= bit;
         entry.1 = dot.color;
     }
@@ -167,8 +174,8 @@ mod tests {
     /// A single-column candle at column 0.
     fn geometry(top: f64, bottom: f64, high: f64, low: f64) -> CandleGeometry {
         CandleGeometry {
-            cols: 0..1,
-            center_col: 0,
+            body_left: 0.0,
+            body_right: 1.0,
             body_top_row: top,
             body_bottom_row: bottom,
             high_row: high,

@@ -87,13 +87,15 @@ impl PriceScale {
 /// Maps candle indices to columns of the plot, in both directions.
 ///
 /// Each candle occupies `candle_width` columns followed by a `gap` of empty
-/// columns. The most recent candles that fit are shown, right-aligned, so a
-/// growing series scrolls like a real chart instead of overflowing.
+/// columns, both measured in fractional columns so a backend can place candle
+/// edges on its own sub-column grid (such as braille's half-columns). The most
+/// recent candles that fit are shown, right-aligned, so a growing series scrolls
+/// like a real chart instead of overflowing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimeScale {
     width: u16,
-    candle_width: u16,
-    gap: u16,
+    candle_width: f64,
+    gap: f64,
     /// Index of the leftmost visible candle in the full series.
     first_visible: usize,
     /// Number of visible candles.
@@ -102,13 +104,20 @@ pub struct TimeScale {
 
 impl TimeScale {
     /// Lays out `candle_count` candles into a plot `width`, drawing each
-    /// `candle_width` columns wide with `gap` columns between them.
-    pub fn new(width: u16, candle_count: usize, candle_width: u16, gap: u16) -> Self {
-        let candle_width = candle_width.max(1);
-        let slot = u32::from(candle_width) + u32::from(gap);
-        // The final candle needs no trailing gap. `slot` is always >= 1 because
-        // `candle_width` is clamped to at least 1.
-        let capacity = ((u32::from(width) + u32::from(gap)) / slot) as usize;
+    /// `candle_width` columns wide with `gap` columns between them. Both may be
+    /// fractional. A backend quantizes them to its horizontal resolution.
+    pub fn new(width: u16, candle_count: usize, candle_width: f64, gap: f64) -> Self {
+        let candle_width = candle_width.max(0.0);
+        let gap = gap.max(0.0);
+        let slot = candle_width + gap;
+        let capacity = if slot > 0.0 {
+            // Calculate the number of candles that can fit into the plot width.
+            // The last candle doesn't need a trailing gap.
+            ((f64::from(width) + gap) / slot).floor() as usize
+        } else {
+            // If the slot is zero, treat every candle as fitting.
+            candle_count
+        };
         let visible = capacity.min(candle_count);
         let first_visible = candle_count - visible;
         Self {
@@ -130,33 +139,39 @@ impl TimeScale {
         self.visible
     }
 
-    /// Width drawn for each candle body, in columns.
-    pub fn candle_width(&self) -> u16 {
+    /// Width drawn for each candle body, in fractional columns.
+    pub fn candle_width(&self) -> f64 {
         self.candle_width
     }
 
-    /// The leftmost column of the visible candle at `visible_index`
-    /// (`0` is the leftmost visible candle).
-    pub fn index_to_col(&self, visible_index: usize) -> u16 {
+    /// The fractional left edge of the visible candle at `visible_index`
+    /// (`0` is the leftmost visible candle), measured from the plot's left.
+    pub fn index_to_left(&self, visible_index: usize) -> f64 {
         let slot = self.candle_width + self.gap;
-        (visible_index as u16).saturating_mul(slot)
+        visible_index as f64 * slot
     }
 
-    /// Center column of the visible candle at `visible_index`, where the wick
-    /// is drawn.
+    /// Center column of the visible candle at `visible_index`, rounded to a
+    /// whole column. Used to place the bottom-axis label under the candle.
     pub fn index_to_center_col(&self, visible_index: usize) -> u16 {
-        self.index_to_col(visible_index) + self.candle_width / 2
+        let center = self.index_to_left(visible_index) + self.candle_width / 2.0;
+        center.round() as u16
     }
 
-    /// Inverse of [`index_to_col`](Self::index_to_col): the visible candle a
-    /// column falls in, or `None` for a gap or out-of-range column.
+    /// Inverse of [`index_to_left`](Self::index_to_left): the visible candle a
+    /// column falls in, or `None` for a gap or out-of-range column. A column is
+    /// matched when its center lands within a candle's fractional body span.
     pub fn col_to_index(&self, col: u16) -> Option<usize> {
         if col >= self.width {
             return None;
         }
         let slot = self.candle_width + self.gap;
-        let idx = (col / slot) as usize;
-        let within = col % slot;
+        if slot <= 0.0 {
+            return None;
+        }
+        let center = f64::from(col) + 0.5;
+        let idx = (center / slot).floor() as usize;
+        let within = center - idx as f64 * slot;
         if within < self.candle_width && idx < self.visible {
             Some(idx)
         } else {
@@ -196,20 +211,31 @@ mod tests {
 
     #[test]
     fn column_round_trips_through_index() {
-        let time = TimeScale::new(40, 8, 3, 1);
+        let time = TimeScale::new(40, 8, 3.0, 1.0);
         for vi in 0..time.visible() {
-            let col = time.index_to_col(vi);
+            let col = time.index_to_left(vi) as u16;
             assert_eq!(time.col_to_index(col), Some(vi));
         }
         // A gap column maps to no candle.
-        let gap_col = time.index_to_col(0) + 3; // just past a 3-wide body
+        let gap_col = time.index_to_left(0) as u16 + 3; // just past a 3-wide body
         assert_eq!(time.col_to_index(gap_col), None);
+    }
+
+    #[test]
+    fn fractional_candles_tile_to_exact_sub_column_boundaries() {
+        // A 1.5-column body with a 0.5-column gap is a 2.0-column slot, so each
+        // candle's left edge lands on a whole column and braille's half-columns.
+        let time = TimeScale::new(40, 8, 1.5, 0.5);
+        assert_eq!(time.index_to_left(0), 0.0);
+        assert_eq!(time.index_to_left(1), 2.0);
+        assert_eq!(time.index_to_left(2), 4.0);
+        assert_eq!(time.candle_width(), 1.5);
     }
 
     #[test]
     fn shows_most_recent_candles_when_space_is_tight() {
         // Room for only a few candles out of many: the latest are kept.
-        let time = TimeScale::new(12, 100, 3, 1);
+        let time = TimeScale::new(12, 100, 3.0, 1.0);
         assert!(time.visible() < 100);
         assert_eq!(time.first_visible() + time.visible(), 100);
     }

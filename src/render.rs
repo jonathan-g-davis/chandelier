@@ -3,8 +3,6 @@
 //! Chart containers compute plot layouts, series generate geometry, and
 //! rendering backends quantize it to a glyph family.
 
-use std::ops::Range;
-
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
@@ -29,15 +27,17 @@ pub struct PlotLayout {
 
 /// One candle's geometry and colors.
 ///
-/// Geometry is defined in terms of plot area, not a specific glyph family.
-/// `cols` is the absolute column range the body spans and `center_col` the
-/// absolute column carrying the wick. The four row fields are fractional rows
-/// measured from the top of the plot (smaller is higher on screen).
+/// Geometry is defined in terms of plot area, not a specific glyph family. Both
+/// axes are continuous and measured from the plot's top-left corner: the body
+/// spans the fractional columns `[body_left, body_right)` and the four row
+/// fields are fractional rows (smaller is higher on screen). A backend quantizes
+/// each axis to its own grid, so the same geometry draws through any glyph
+/// family. The wick runs along the body's horizontal [`center`](Self::center).
 pub(crate) struct CandleGeometry {
-    /// The absolute column range the body spans.
-    pub cols: Range<u16>,
-    /// The absolute column carrying the wick.
-    pub center_col: u16,
+    /// The fractional column of the left edge of the body.
+    pub body_left: f64,
+    /// The fractional column of the right edge of the body.
+    pub body_right: f64,
     /// The fractional row of the top of the body.
     pub body_top_row: f64,
     /// The fractional row of the bottom of the body.
@@ -52,6 +52,14 @@ pub(crate) struct CandleGeometry {
     pub wick: Color,
     /// The color the empty portion of a partially filled cell is painted.
     pub bg: Color,
+}
+
+impl CandleGeometry {
+    /// The fractional column at the horizontal center of the body, where the
+    /// wick is drawn. A backend quantizes this to the nearest sub-cell.
+    pub(crate) fn center(&self) -> f64 {
+        (self.body_left + self.body_right) / 2.0
+    }
 }
 
 /// A backend that paints fractional-row geometry into terminal cells.

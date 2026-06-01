@@ -39,7 +39,7 @@ fn bull_and_bear_use_distinct_colors() {
         Candle::new(108.0, 109.0, 95.0, 96.0),  // bear
     ];
     let series = CandleSeries::new(&candles)
-        .width(3)
+        .width(3.0)
         .bull_style(Color::Green)
         .bear_style(Color::Red);
     let chart = CandlestickChart::new(series)
@@ -55,7 +55,7 @@ fn bull_and_bear_use_distinct_colors() {
 #[test]
 fn draws_wick_and_body_glyphs() {
     let candles = [Candle::new(50.0, 60.0, 40.0, 55.0)];
-    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3)).axes(false);
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0)).axes(false);
     let buf = render(&chart, 20, 16);
 
     let symbols: String = buf.content().iter().map(|c| c.symbol()).collect();
@@ -92,7 +92,7 @@ fn renders_within_bounds_for_many_candles() {
             Candle::new(base, base + 3.0, base - 2.0, base + 1.0)
         })
         .collect();
-    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(1).gap(0));
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(1.0).gap(0.0));
     let _ = render(&chart, 24, 12); // must not panic
 }
 
@@ -112,7 +112,7 @@ fn partial_body_edges_keep_the_background_and_never_overstate_the_body() {
     let wick = Color::Rgb(110, 116, 130);
     let candles = [Candle::new(100.0, 130.0, 70.0, 104.0)];
     let series = CandleSeries::new(&candles)
-        .width(1)
+        .width(1.0)
         .bull_style(bull)
         .wick_style(wick);
     let chart = CandlestickChart::new(series)
@@ -142,7 +142,7 @@ fn partial_wick_tips_use_a_half_glyph_in_the_wick_color() {
     let wick = Color::Rgb(110, 116, 130);
     let candles = [Candle::new(100.0, 130.0, 70.0, 104.0)];
     let series = CandleSeries::new(&candles)
-        .width(1)
+        .width(1.0)
         .bull_style(bull)
         .wick_style(wick);
     let chart = CandlestickChart::new(series)
@@ -175,7 +175,7 @@ fn partial_bodies_render_over_a_transparent_background() {
     // no background to render correctly.
     let bull = Color::Rgb(0, 200, 120);
     let candles = [Candle::new(100.0, 130.0, 70.0, 104.0)];
-    let series = CandleSeries::new(&candles).width(1).bull_style(bull);
+    let series = CandleSeries::new(&candles).width(1.0).bull_style(bull);
     let chart = CandlestickChart::new(series).axes(false); // no .style(): bg stays Reset
     let buf = render(&chart, 1, 24);
 
@@ -206,7 +206,7 @@ fn candle_glyph_grid_is_stable() {
         Candle::new(105.0, 109.0, 104.0, 104.5),
         Candle::new(104.5, 105.0, 98.0, 99.0),
     ];
-    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3).gap(1)).axes(false);
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0)).axes(false);
     let buf = render(&chart, 12, 8);
 
     let mut grid: Vec<String> = Vec::new();
@@ -254,8 +254,9 @@ fn default_marker_is_block() {
         Candle::new(105.0, 109.0, 104.0, 104.5),
         Candle::new(104.5, 105.0, 98.0, 99.0),
     ];
-    let default = CandlestickChart::new(CandleSeries::new(&candles).width(3).gap(1)).axes(false);
-    let explicit = CandlestickChart::new(CandleSeries::new(&candles).width(3).gap(1))
+    let default =
+        CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0)).axes(false);
+    let explicit = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
         .axes(false)
         .marker(Marker::Block);
 
@@ -267,10 +268,12 @@ fn default_marker_is_block() {
 #[test]
 fn braille_marker_renders_braille_cells_for_a_known_candle() {
     // A two-column candle drawn with braille: its body fills both columns with
-    // braille dots (a full body cell is ⣿), and a wick runs in the candle's
-    // center dot column above and below the body.
+    // braille dots (a full body cell is ⣿), and a wick runs in the dot column
+    // nearest the body's center, above and below the body. The body is four dots
+    // wide, so its center is the seam between the two columns and the wick lands
+    // on the left dot of the second column.
     let candles = [Candle::new(100.0, 130.0, 70.0, 110.0)];
-    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(2).gap(0))
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(2.0).gap(0.0))
         .axes(false)
         .marker(Marker::Braille);
     let buf = render(&chart, 2, 8);
@@ -292,10 +295,10 @@ fn braille_marker_renders_braille_cells_for_a_known_candle() {
         symbols.contains('\u{28FF}'),
         "a full braille body cell (⣿) should appear, got grid {grid:?}"
     );
-    // The wick reaches above the body in the center (right) dot column only, so
-    // the top-left cell stays blank while the top-right carries dots.
+    // The wick reaches above the body in a single center dot column, so the
+    // top-left cell stays blank while the top-right carries the wick dots.
     assert_eq!(
-        &grid[0], " \u{28B0}",
+        &grid[0], " \u{2846}",
         "wick in the center dot column above body"
     );
 }
@@ -331,8 +334,8 @@ fn show_chart() {
         Candle::new(107.5, 110.0, 106.0, 106.5),
     ];
     let series = CandleSeries::new(&candles)
-        .width(3)
-        .gap(1)
+        .width(3.0)
+        .gap(1.0)
         .bull_style(Color::Rgb(38, 166, 154))
         .bear_style(Color::Rgb(239, 83, 80))
         .wick_style(Color::Rgb(110, 116, 130));
