@@ -3,7 +3,12 @@
 //! Input is plain values. Chandelier does not fetch, compute, or persist
 //! anything. Callers pass already-computed OHLC data.
 
+use ratatui_core::buffer::Buffer;
+use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
+
+use crate::render::{CandleGeometry, PlotLayout, Rasterizer, Series};
+use crate::scale::TimeScale;
 
 /// A single open/high/low/close bar.
 ///
@@ -80,8 +85,8 @@ pub struct CandleSeries<'a> {
     bull: Style,
     bear: Style,
     wick: Option<Style>,
-    pub(crate) width: u16,
-    pub(crate) gap: u16,
+    pub(crate) width: f64,
+    pub(crate) gap: f64,
 }
 
 impl<'a> CandleSeries<'a> {
@@ -93,8 +98,8 @@ impl<'a> CandleSeries<'a> {
             bull: Style::new().fg(Color::Green),
             bear: Style::new().fg(Color::Red),
             wick: None,
-            width: 3,
-            gap: 1,
+            width: 3.0,
+            gap: 1.0,
         }
     }
 
@@ -122,16 +127,20 @@ impl<'a> CandleSeries<'a> {
         self
     }
 
-    /// Sets the candle body width in columns (clamped to at least one when drawn).
+    /// Sets the candle body width in columns.
+    ///
+    /// May be fractional. Each backend quantizes the width to its horizontal grid.
     #[must_use]
-    pub fn width(mut self, cols: u16) -> Self {
+    pub fn width(mut self, cols: f64) -> Self {
         self.width = cols;
         self
     }
 
     /// Sets the gap, in columns, between adjacent candles.
+    ///
+    /// May be fractional. Each backend quantized the width to its horizontal grid.
     #[must_use]
-    pub fn gap(mut self, gap: u16) -> Self {
+    pub fn gap(mut self, gap: f64) -> Self {
         self.gap = gap;
         self
     }
@@ -152,6 +161,41 @@ impl<'a> CandleSeries<'a> {
         self.wick
             .and_then(|w| w.fg)
             .unwrap_or_else(|| self.body_color(candle))
+    }
+}
+
+impl Series for CandleSeries<'_> {
+    fn price_bounds(&self) -> Option<(f64, f64)> {
+        price_bounds(self.candles)
+    }
+
+    fn time_scale(&self, plot: Rect) -> TimeScale {
+        TimeScale::new(plot.width, self.candles.len(), self.width, self.gap)
+    }
+
+    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout, rasterizer: &dyn Rasterizer) {
+        let plot = layout.plot;
+        let scale = layout.price;
+        let time = layout.time;
+        let bg = layout.bg;
+
+        for vi in 0..time.visible() {
+            let candle = self.candles[time.first_visible() + vi];
+            let body_left = time.index_to_left(vi);
+
+            let geometry = CandleGeometry {
+                body_left,
+                body_right: body_left + time.candle_width(),
+                body_top_row: scale.price_to_row_f64(candle.body_top()),
+                body_bottom_row: scale.price_to_row_f64(candle.body_bottom()),
+                high_row: scale.price_to_row_f64(candle.high),
+                low_row: scale.price_to_row_f64(candle.low),
+                body: self.body_color(candle),
+                wick: self.wick_color(candle),
+                bg,
+            };
+            rasterizer.draw_candle(buf, plot, &geometry);
+        }
     }
 }
 
@@ -199,8 +243,8 @@ mod tests {
             Candle::new(108.0, 109.0, 95.0, 96.0),  // bear
         ];
         let series = CandleSeries::new(&candles);
-        assert_eq!(series.width, 3);
-        assert_eq!(series.gap, 1);
+        assert_eq!(series.width, 3.0);
+        assert_eq!(series.gap, 1.0);
         assert_eq!(series.body_color(candles[0]), Color::Green);
         assert_eq!(series.body_color(candles[1]), Color::Red);
     }

@@ -53,8 +53,8 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
     // The candle series owns the data and its bull/bear/wick colors. A neutral
     // wick color, distinct from the bodies, keeps wicks legible against either.
     let series = CandleSeries::new(candles)
-        .width(1)
-        .gap(1)
+        .width(1.0)
+        .gap(1.0)
         .bull_style(Color::Rgb(38, 166, 154))
         .bear_style(Color::Rgb(239, 83, 80))
         .wick_style(Color::Rgb(110, 116, 130));
