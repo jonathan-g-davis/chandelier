@@ -2,6 +2,7 @@
 
 use crate::block::Block;
 use crate::braille::Braille;
+use crate::quadrant::Quadrant;
 use crate::render::Rasterizer;
 
 /// The glyph family a chart rasterizes candles with.
@@ -24,6 +25,13 @@ pub enum Marker {
     /// Support depends on the terminal and font; terminals without Unicode
     /// Braille show replacement glyphs instead of dots.
     Braille,
+    /// Quadrant and half-block glyphs (`█`, `▀`, `▄`, `▌`, `▝`, ...), a 2x2 grid
+    /// per cell. This doubles both the vertical and horizontal resolution, with
+    /// one color per cell, so bodies resolve to a half row and a half column like
+    /// braille. A hollow body lights only the border sub-cells of the same
+    /// footprint, so it is an outline of exactly the size of the filled body.
+    /// Wick tips resolve to a half row, as with [`Block`](Self::Block).
+    Quadrant,
 }
 
 impl Marker {
@@ -32,6 +40,7 @@ impl Marker {
         match self {
             Self::Block => &Block,
             Self::Braille => &Braille,
+            Self::Quadrant => &Quadrant,
         }
     }
 }
