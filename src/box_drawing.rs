@@ -22,7 +22,7 @@ use ratatui_core::style::Color;
 
 use crate::quadrant::{self, SubRect};
 use crate::render::{BodyFill, CandleGeometry, Rasterizer};
-use crate::wick::{self, HALVES_PER_ROW};
+use crate::wick;
 
 /// Quadrant sub-cells per cell along each axis.
 const SUB: u32 = 2;
@@ -124,7 +124,7 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
 
     // The wick only paints cells outside the body's rows, so it never collides
     // with the outline drawn next.
-    wick::draw(buf, plot, geometry, row_top, row_bot);
+    let (up, down) = wick::draw(buf, plot, geometry, row_top, row_bot);
     draw_outline(buf, plot, geometry, footprint);
 
     // Fuse the wick into the body's edges with tee glyphs, but only when the
@@ -135,7 +135,6 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
         return;
     }
 
-    let (up, down) = wick_reach(plot, geometry, row_top, row_bot);
     if up {
         set_cell(
             buf,
@@ -178,7 +177,7 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
     let row = (mid.floor() as u32).min(last_row);
 
     // The wick reaches above and below the single body row.
-    wick::draw(buf, plot, geometry, row, row);
+    let (up, down) = wick::draw(buf, plot, geometry, row, row);
 
     for col in col_left..=col_right {
         set_cell(buf, plot, col, row, "─", fg, bg);
@@ -186,7 +185,6 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
 
     // Fuse the meeting wicks into the body line at its center column: a cross
     // when both reach, a tee for one, the plain line for neither.
-    let (up, down) = wick_reach(plot, geometry, row, row);
     let symbol = match (up, down) {
         (true, true) => "┼",
         (true, false) => "┴",
@@ -195,19 +193,6 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
     };
     let center_col = geometry.center().floor() as u32;
     set_cell(buf, plot, center_col, row, symbol, fg, bg);
-}
-
-/// Whether the upper and lower wicks reach past the body's top and bottom cells.
-///
-/// Matches the [`wick`](crate::wick) module's half-row quantization so a tee is
-/// drawn exactly when that module actually paints a wick to the edge.
-fn wick_reach(plot: Rect, geometry: &CandleGeometry, row_top: u32, row_bot: u32) -> (bool, bool) {
-    let last_half = u32::from(plot.height) * HALVES_PER_ROW - 1;
-    let high_half = (geometry.high_row * f64::from(HALVES_PER_ROW)).round() as u32;
-    let low_half = ((geometry.low_row * f64::from(HALVES_PER_ROW)).round() as u32).min(last_half);
-    let up = high_half < row_top * HALVES_PER_ROW;
-    let down = low_half >= (row_bot + 1) * HALVES_PER_ROW;
-    (up, down)
 }
 
 /// Fills `footprint` solid with quadrant blocks, inset to the same cell-center

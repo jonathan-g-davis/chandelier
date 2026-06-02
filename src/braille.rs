@@ -12,7 +12,7 @@ use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 use ratatui_core::symbols::braille::BRAILLE;
 
-use crate::render::{BodyFill, CandleGeometry, Rasterizer};
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
 
 /// Braille-dot rasterizer backend.
 ///
@@ -67,25 +67,16 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
     // Body endpoints to the nearest dot row, at least one dot tall so a doji
     // still shows a body.
-    let mut top_dot = (body_top_row * DOTS_Y as f64).round() as u32;
-    let mut bot_dot = (body_bottom_row * DOTS_Y as f64).round() as u32;
-    if bot_dot <= top_dot {
-        bot_dot = top_dot + 1;
-    }
-    bot_dot = bot_dot.min(max_dot_y);
-    top_dot = top_dot.min(bot_dot - 1);
+    let (top_dot, bot_dot) =
+        render::quantize_span(body_top_row, body_bottom_row, DOTS_Y, max_dot_y);
 
     let last_dot_y = max_dot_y - 1;
     let high_dot = ((high_row * DOTS_Y as f64).round() as u32).min(last_dot_y);
     let low_dot = ((low_row * DOTS_Y as f64).round() as u32).min(last_dot_y);
 
     // Body edges to the nearest dot column, at least one dot wide.
-    let left_dot = (body_left * f64::from(DOTS_X)).round() as u32;
-    let mut right_dot = (body_right * f64::from(DOTS_X)).round() as u32;
-    if right_dot <= left_dot {
-        right_dot = left_dot + 1;
-    }
-    let right_dot = right_dot.min(max_dot_x);
+    let (left_dot, right_dot) =
+        render::quantize_span(body_left, body_right, u32::from(DOTS_X), max_dot_x);
 
     let mut dots: Vec<Dot> = Vec::new();
 
@@ -114,8 +105,7 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     let hollow = fill == BodyFill::Hollow;
     for dot_x in left_dot..right_dot {
         for y in top_dot..bot_dot {
-            let on_border =
-                dot_x == left_dot || dot_x + 1 == right_dot || y == top_dot || y + 1 == bot_dot;
+            let on_border = render::on_border(dot_x, y, left_dot, right_dot, top_dot, bot_dot);
             if !hollow || on_border {
                 dots.push(Dot {
                     x: dot_x,

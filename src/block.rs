@@ -16,7 +16,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier};
 
-use crate::render::{BodyFill, CandleGeometry, Rasterizer};
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
 use crate::wick;
 
 /// Eighth-block rasterizer backend.
@@ -60,14 +60,8 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
     // Body endpoints to the nearest eighth, at least one eighth tall so a doji
     // still shows a body.
-    let mut top_sub = (body_top_row * EIGHTHS_PER_ROW as f64).round() as u32;
-    let mut bot_sub = (body_bottom_row * EIGHTHS_PER_ROW as f64).round() as u32;
-
-    if bot_sub <= top_sub {
-        bot_sub = top_sub + 1;
-    }
-    bot_sub = bot_sub.min(max_sub);
-    top_sub = top_sub.min(bot_sub - 1);
+    let (top_sub, bot_sub) =
+        render::quantize_span(body_top_row, body_bottom_row, EIGHTHS_PER_ROW, max_sub);
 
     let row_top = top_sub / EIGHTHS_PER_ROW;
     let row_bot = (bot_sub - 1) / EIGHTHS_PER_ROW;
