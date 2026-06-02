@@ -1,7 +1,7 @@
 //! The candlestick chart widget.
 
 use ratatui_core::buffer::Buffer;
-use ratatui_core::layout::Rect;
+use ratatui_core::layout::{Alignment, Rect};
 use ratatui_core::style::{Color, Style, Styled};
 use ratatui_core::widgets::Widget;
 use ratatui_widgets::block::{Block, BlockExt};
@@ -161,7 +161,11 @@ impl<'a> CandlestickChart<'a> {
 
             let row = scale.price_to_row(t);
             let label = axis::format_price(t, step);
-            let padded = format!("{label:>width$}");
+            let padded = match self.price_axis.labels_alignment {
+                Alignment::Left => format!("{label:<width$}"),
+                Alignment::Center => format!("{label:^width$}"),
+                Alignment::Right => format!("{label:>width$}"),
+            };
             buf.set_string(axis_x, plot.y + row, padded, self.price_axis.style);
         }
     }
@@ -178,10 +182,15 @@ impl<'a> CandlestickChart<'a> {
             };
             let cx = plot.x + time.index_to_center_col(vi);
             let len = label.chars().count() as u16;
+            let start = match self.time_axis.labels_alignment {
+                Alignment::Left => cx,
+                Alignment::Center => cx.saturating_sub(len / 2),
+                Alignment::Right => cx.saturating_sub(len.saturating_sub(1)),
+            };
 
-            if cx >= next_free && cx + len <= plot.x + plot.width {
-                buf.set_string(cx, y, &label, self.time_axis.style);
-                next_free = cx + len + 2;
+            if start >= next_free && start + len <= plot.x + plot.width {
+                buf.set_string(start, y, &label, self.time_axis.style);
+                next_free = start + len + 2;
             }
         }
     }
