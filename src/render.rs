@@ -106,6 +106,7 @@ pub(crate) trait Series {
     /// view.
     fn time_scale(&self, plot: Rect) -> TimeScale;
 
-    /// Draws the visible data into the plot area through a rasterizer.
-    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout, rasterizer: &dyn Rasterizer);
+    /// Draws the visible data into the plot area, rasterized with the series'
+    /// selected glyph family.
+    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout);
 }

@@ -6,7 +6,6 @@ use ratatui_core::style::{Color, Style, Styled};
 use ratatui_core::widgets::Widget;
 
 use crate::axis::{self, PriceAxis, TimeAxis};
-use crate::marker::Marker;
 use crate::render::{PlotLayout, Series};
 use crate::scale::{PriceScale, TimeScale};
 use crate::series::CandleSeries;
@@ -15,14 +14,7 @@ use crate::series::CandleSeries;
 /// [`TimeAxis`].
 ///
 /// The chart autoscales the price axis to the data in view and draws the most
-/// recent candles that fit, right-aligned. Body endpoints are placed to the
-/// nearest eighth of a row, so open and close levels do not snap to whole rows.
-///
-/// The chart's own [`Style`] is the background the partial-cell rendering blends
-/// against; set its background to your terminal's for a crisp body top edge. The
-/// widget implements [`Styled`], so [`Stylize`](ratatui_core::style::Stylize)
-/// shorthands set that base style. Per-candle colors live on the [`CandleSeries`];
-/// label colors live on each axis.
+/// recent candles that fit, right-aligned.
 #[derive(Debug, Clone)]
 pub struct CandlestickChart<'a> {
     series: CandleSeries<'a>,
@@ -31,7 +23,6 @@ pub struct CandlestickChart<'a> {
     price_axis: PriceAxis,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
-    marker: Marker,
 }
 
 impl<'a> CandlestickChart<'a> {
@@ -44,7 +35,6 @@ impl<'a> CandlestickChart<'a> {
             price_axis: PriceAxis::new(),
             time_axis: TimeAxis::new(),
             show_axes: true,
-            marker: Marker::default(),
         }
     }
 
@@ -84,14 +74,6 @@ impl<'a> CandlestickChart<'a> {
         self
     }
 
-    /// Sets the glyph family the candles are drawn with. Defaults to
-    /// [`Marker::Block`].
-    #[must_use]
-    pub fn marker(mut self, marker: Marker) -> Self {
-        self.marker = marker;
-        self
-    }
-
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {
         if area.width == 0 || area.height == 0 {
             return;
@@ -113,7 +95,7 @@ impl<'a> CandlestickChart<'a> {
             return;
         };
 
-        self.series.draw(buf, &layout, self.marker.rasterizer());
+        self.series.draw(buf, &layout);
         self.draw_overlays(buf, &layout);
 
         if self.show_axes {

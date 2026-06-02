@@ -11,7 +11,7 @@ use crate::render::Rasterizer;
 /// This mirrors Ratatui's [`symbols::Marker`](ratatui_core::symbols::Marker):
 /// it selects which character set quantizes the fractional-row geometry into
 /// terminal cells. Pass it to
-/// [`CandlestickChart::marker`](crate::CandlestickChart::marker).
+/// [`CandleSeries::marker`](crate::CandleSeries::marker).
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum Marker {
