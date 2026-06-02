@@ -4,14 +4,13 @@
 //! horizontal resolution of a whole cell. A candle's body arrives as
 //! fractional-row geometry and is quantized to a 2x2 sub-cell grid.
 //!
-//! Wicks are drawn by the shared [`wick`](crate::wick) module.
+//! Wicks are drawn by the shared [`wick`](crate::render::wick) module.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 
-use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
-use crate::wick;
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Quadrant-block rasterizer backend.
 ///

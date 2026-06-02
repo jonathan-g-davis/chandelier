@@ -20,9 +20,8 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::Style;
 
-use crate::quadrant::{self, SubRect};
-use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
-use crate::wick;
+use crate::render::quadrant::{self, SubRect};
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Quadrant sub-cells per cell along each axis.
 const SUB: u32 = 2;

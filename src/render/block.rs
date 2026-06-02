@@ -4,7 +4,7 @@
 //! colors to paint it in. This module owns everything specific to the block
 //! character set: quantizing a row to one of eight vertical steps and the
 //! foreground/background inversion that lets a body edge land between two rows.
-//! Wicks are drawn by the shared [`wick`](crate::wick) module.
+//! Wicks are drawn by the shared [`wick`](crate::render::wick) module.
 //!
 //! A body confined to a single row that touches neither the top nor the bottom
 //! of that cell is drawn flush to the cell bottom. Block glyphs fill from the
@@ -16,8 +16,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
 
-use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
-use crate::wick;
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Eighth-block rasterizer backend.
 ///

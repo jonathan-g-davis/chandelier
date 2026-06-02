@@ -9,6 +9,17 @@ use ratatui_core::style::{Color, Style};
 
 use crate::scale::{PriceScale, TimeScale};
 
+mod block;
+mod box_drawing;
+mod braille;
+mod quadrant;
+mod wick;
+
+pub(crate) use block::Block;
+pub(crate) use box_drawing::BoxDrawing;
+pub(crate) use braille::Braille;
+pub(crate) use quadrant::Quadrant;
+
 /// The laid-out plot area together with the scales mapping data onto it.
 ///
 /// A container computes this once for the drawn area and shares it with
