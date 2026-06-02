@@ -3,25 +3,28 @@
 //! [`PriceAxis`] and [`TimeAxis`] are small style-and-layout configurations the
 //! chart composes; the tick helpers pick where price labels go and how they read.
 
+use ratatui_core::layout::Alignment;
 use ratatui_core::style::{Color, Style, Styled};
 
 /// Configuration for the price (vertical) axis.
 ///
-/// Carries how the labels are styled and how many columns the axis reserves on
-/// the right. The value range and tick positions are chosen automatically from
-/// the data in view; choosing them manually is not offered yet.
+/// Carries how the labels are styled, how many columns the axis reserves on the
+/// right, and how the labels sit within those columns. The value range and tick
+/// positions are chosen automatically from the data in view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PriceAxis {
     pub(crate) style: Style,
     pub(crate) width: u16,
+    pub(crate) labels_alignment: Alignment,
 }
 
 impl PriceAxis {
-    /// A price axis with gray labels reserving eight columns.
+    /// A price axis with gray, right-aligned labels reserving eight columns.
     pub fn new() -> Self {
         Self {
             style: Style::new().fg(Color::Gray),
             width: 8,
+            labels_alignment: Alignment::Right,
         }
     }
 
@@ -36,6 +39,13 @@ impl PriceAxis {
     #[must_use]
     pub fn width(mut self, cols: u16) -> Self {
         self.width = cols;
+        self
+    }
+
+    /// Sets how labels are aligned within the columns the axis reserves.
+    #[must_use]
+    pub fn labels_alignment(mut self, alignment: Alignment) -> Self {
+        self.labels_alignment = alignment;
         self
     }
 }
@@ -61,21 +71,24 @@ impl Styled for PriceAxis {
 
 /// Configuration for the time (horizontal) axis.
 ///
-/// Carries the label style and, optionally, the text for each candle aligned to
-/// the full series (index `i` labels `candles[i]`). Without labels the axis
-/// shows candle indices.
+/// Carries the label style, optionally the text for each candle aligned to the
+/// full series (index `i` labels `candles[i]`), and how each label sits relative
+/// to its candle's center column. Without labels the axis shows candle indices.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimeAxis<'a> {
     pub(crate) style: Style,
     pub(crate) labels: Option<&'a [String]>,
+    pub(crate) labels_alignment: Alignment,
 }
 
 impl<'a> TimeAxis<'a> {
-    /// A time axis with gray labels and no explicit label text.
+    /// A time axis with gray labels, no explicit label text, and labels anchored
+    /// from their candle's center column.
     pub fn new() -> Self {
         Self {
             style: Style::new().fg(Color::Gray),
             labels: None,
+            labels_alignment: Alignment::Left,
         }
     }
 
@@ -90,6 +103,17 @@ impl<'a> TimeAxis<'a> {
     #[must_use]
     pub fn labels(mut self, labels: &'a [String]) -> Self {
         self.labels = Some(labels);
+        self
+    }
+
+    /// Sets how each label sits relative to its candle's center column.
+    ///
+    /// [`Left`](Alignment::Left) starts the label at the center column,
+    /// [`Center`](Alignment::Center) centers it on the column, and
+    /// [`Right`](Alignment::Right) ends it at the column.
+    #[must_use]
+    pub fn labels_alignment(mut self, alignment: Alignment) -> Self {
+        self.labels_alignment = alignment;
         self
     }
 }
@@ -232,10 +256,15 @@ mod tests {
         let axis = PriceAxis::default();
         assert_eq!(axis.width, 8);
         assert_eq!(axis.style.fg, Some(Color::Gray));
+        assert_eq!(axis.labels_alignment, Alignment::Right);
 
-        let axis = axis.width(10).style(Color::Red);
+        let axis = axis
+            .width(10)
+            .style(Color::Red)
+            .labels_alignment(Alignment::Left);
         assert_eq!(axis.width, 10);
         assert_eq!(axis.style.fg, Some(Color::Red));
+        assert_eq!(axis.labels_alignment, Alignment::Left);
     }
 
     #[test]
@@ -243,10 +272,15 @@ mod tests {
         let axis = TimeAxis::default();
         assert_eq!(axis.style.fg, Some(Color::Gray));
         assert!(axis.labels.is_none());
+        assert_eq!(axis.labels_alignment, Alignment::Left);
 
         let labels = [String::from("a"), String::from("b")];
-        let axis = axis.labels(&labels).style(Color::Blue);
+        let axis = axis
+            .labels(&labels)
+            .style(Color::Blue)
+            .labels_alignment(Alignment::Center);
         assert_eq!(axis.labels.unwrap().len(), 2);
         assert_eq!(axis.style.fg, Some(Color::Blue));
+        assert_eq!(axis.labels_alignment, Alignment::Center);
     }
 }
