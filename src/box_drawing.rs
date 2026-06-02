@@ -7,10 +7,14 @@
 //! is wide enough, the wick can also be fused into the body's edges with tee
 //! glyphs.
 //!
-//! Solid bodies, and hollow bodies too small to enclose a closed outline, are
-//! filled with quadrant blocks inset to the same cell-center bounds the outline
-//! traces, so a filled and a hollow body of the same geometry occupy exactly the
-//! same space.
+//! Solid bodies, and hollow bodies wide enough but too short to enclose a closed
+//! outline, are filled with quadrant blocks inset to the same cell-center bounds
+//! the outline traces, so a filled and a hollow body of the same geometry occupy
+//! exactly the same space.
+//!
+//! A body so short it collapses to a single row (a doji) cannot form an outline
+//! and is drawn as a flat horizontal line, fused into a tee or a cross where its
+//! wicks meet it, regardless of fill.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
@@ -22,6 +26,12 @@ use crate::wick::{self, HALVES_PER_ROW};
 
 /// Quadrant sub-cells per cell along each axis.
 const SUB: u32 = 2;
+
+/// A body shorter than this many rows renders as a flat doji line instead of a
+/// quadrant block. It is the midpoint between zero height and the half row a
+/// single quadrant sub-cell spans, so a short body quantizes to whichever is
+/// nearer its true height.
+const FLAT_MAX_HEIGHT: f64 = 0.25;
 
 /// Box-drawing rasterizer backend.
 ///
@@ -92,7 +102,10 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
     let footprint = footprint(plot, geometry);
 
-    if geometry.fill == BodyFill::Hollow && footprint.closeable() {
+    let height = geometry.body_bottom_row - geometry.body_top_row;
+    if height < FLAT_MAX_HEIGHT {
+        draw_flat(buf, plot, geometry, footprint);
+    } else if geometry.fill == BodyFill::Hollow && footprint.closeable() {
         draw_hollow(buf, plot, geometry, footprint);
     } else {
         fill_solid(buf, plot, geometry, footprint);
@@ -122,13 +135,8 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
         return;
     }
 
-    // Match the wick module's quantization so a tee is drawn exactly when a wick
-    // actually reaches that edge.
-    let last_half = u32::from(plot.height) * HALVES_PER_ROW - 1;
-    let high_half = (geometry.high_row * f64::from(HALVES_PER_ROW)).round() as u32;
-    let low_half = ((geometry.low_row * f64::from(HALVES_PER_ROW)).round() as u32).min(last_half);
-
-    if high_half < row_top * HALVES_PER_ROW {
+    let (up, down) = wick_reach(plot, geometry, row_top, row_bot);
+    if up {
         set_cell(
             buf,
             plot,
@@ -139,7 +147,7 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
             geometry.bg,
         );
     }
-    if low_half >= (row_bot + 1) * HALVES_PER_ROW {
+    if down {
         set_cell(
             buf,
             plot,
@@ -150,6 +158,56 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
             geometry.bg,
         );
     }
+}
+
+/// Draws a body too short to enclose an outline as a flat horizontal line, the
+/// box-drawing form of a doji. The line spans the body's columns, and where the
+/// wicks meet it at the center column they fuse it into a tee or a cross.
+fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint: Footprint) {
+    let Footprint {
+        col_left,
+        col_right,
+        ..
+    } = footprint;
+    let fg = geometry.body;
+    let bg = geometry.bg;
+
+    // Place the line at the cell whose center is nearest the body's midpoint.
+    let mid = (geometry.body_top_row + geometry.body_bottom_row) / 2.0;
+    let last_row = u32::from(plot.height).saturating_sub(1);
+    let row = (mid.floor() as u32).min(last_row);
+
+    // The wick reaches above and below the single body row.
+    wick::draw(buf, plot, geometry, row, row);
+
+    for col in col_left..=col_right {
+        set_cell(buf, plot, col, row, "─", fg, bg);
+    }
+
+    // Fuse the meeting wicks into the body line at its center column: a cross
+    // when both reach, a tee for one, the plain line for neither.
+    let (up, down) = wick_reach(plot, geometry, row, row);
+    let symbol = match (up, down) {
+        (true, true) => "┼",
+        (true, false) => "┴",
+        (false, true) => "┬",
+        (false, false) => "─",
+    };
+    let center_col = geometry.center().floor() as u32;
+    set_cell(buf, plot, center_col, row, symbol, fg, bg);
+}
+
+/// Whether the upper and lower wicks reach past the body's top and bottom cells.
+///
+/// Matches the [`wick`](crate::wick) module's half-row quantization so a tee is
+/// drawn exactly when that module actually paints a wick to the edge.
+fn wick_reach(plot: Rect, geometry: &CandleGeometry, row_top: u32, row_bot: u32) -> (bool, bool) {
+    let last_half = u32::from(plot.height) * HALVES_PER_ROW - 1;
+    let high_half = (geometry.high_row * f64::from(HALVES_PER_ROW)).round() as u32;
+    let low_half = ((geometry.low_row * f64::from(HALVES_PER_ROW)).round() as u32).min(last_half);
+    let up = high_half < row_top * HALVES_PER_ROW;
+    let down = low_half >= (row_bot + 1) * HALVES_PER_ROW;
+    (up, down)
 }
 
 /// Fills `footprint` solid with quadrant blocks, inset to the same cell-center
@@ -453,15 +511,105 @@ mod tests {
     }
 
     #[test]
-    fn doji_still_shows_a_body() {
-        let plot = Rect::new(0, 0, 1, 1);
-        let mut buf = buffer(1, 1);
+    fn doji_with_both_wicks_is_a_cross() {
+        let plot = Rect::new(0, 0, 3, 5);
+        let mut buf = buffer(3, 5);
 
-        // A zero-height, one-column body: the minimum guard keeps one sub-cell lit.
-        draw_candle(&mut buf, plot, &filled(0.0, 1.0, 0.0, 0.0));
+        // A zero-height body in row 2 with the high above and the low below.
+        let geometry = CandleGeometry {
+            high_row: 0.0,
+            low_row: 5.0,
+            ..hollow(0.0, 3.0, 2.0, 2.0)
+        };
+        draw_candle(&mut buf, plot, &geometry);
 
-        assert_ne!(buf[(0, 0)].symbol(), " ");
-        assert_eq!(buf[(0, 0)].fg, BODY);
+        // The body is a flat line, crossed by the wick at its center.
+        assert_eq!(grid(&buf, 3, 5), [" │ ", " │ ", "─┼─", " │ ", " │ "]);
+        assert_eq!(buf[(1, 2)].symbol(), "┼");
+        assert_eq!(buf[(1, 2)].fg, BODY);
+        assert_eq!(buf[(1, 0)].fg, WICK);
+    }
+
+    #[test]
+    fn short_body_with_one_wick_is_a_tee() {
+        let plot = Rect::new(0, 0, 3, 4);
+        let mut buf = buffer(3, 4);
+
+        // A single-row body with only the high reaching above it.
+        let geometry = CandleGeometry {
+            high_row: 0.0,
+            low_row: 2.0,
+            ..hollow(0.0, 3.0, 2.0, 2.0)
+        };
+        draw_candle(&mut buf, plot, &geometry);
+
+        assert_eq!(
+            buf[(1, 2)].symbol(),
+            "┴",
+            "the line fuses the upper wick only"
+        );
+        assert_eq!(buf[(0, 2)].symbol(), "─");
+        assert_eq!(buf[(2, 2)].symbol(), "─");
+    }
+
+    #[test]
+    fn flat_body_without_wicks_is_a_plain_line() {
+        let plot = Rect::new(0, 0, 3, 3);
+        let mut buf = buffer(3, 3);
+
+        // Open, high, low, and close all coincide: a bare horizontal line.
+        draw_candle(&mut buf, plot, &hollow(0.0, 3.0, 1.0, 1.0));
+
+        assert_eq!(grid(&buf, 3, 3), ["   ", "───", "   "]);
+        assert_eq!(buf[(1, 1)].fg, BODY);
+    }
+
+    #[test]
+    fn near_flat_body_lands_on_the_nearest_cell_center() {
+        let plot = Rect::new(0, 0, 3, 4);
+        let mut buf = buffer(3, 4);
+
+        // A 0.2-row body straddling the row 1/2 boundary: its midpoint (1.75) is
+        // nearest row 1's center, so the line lands there, not at round(1.65) = 2.
+        let geometry = CandleGeometry {
+            high_row: 0.0,
+            low_row: 4.0,
+            ..hollow(0.0, 3.0, 1.65, 1.85)
+        };
+        draw_candle(&mut buf, plot, &geometry);
+
+        assert_eq!(grid(&buf, 3, 4), [" │ ", "─┼─", " │ ", " │ "]);
+    }
+
+    #[test]
+    fn body_above_the_flat_threshold_quantizes_to_quadrant_blocks() {
+        let plot = Rect::new(0, 0, 3, 4);
+        let mut buf = buffer(3, 4);
+
+        // A 0.3-row body is nearer the half row a quadrant sub-cell spans than to
+        // flat, so it renders as quadrant blocks rather than a doji line.
+        draw_candle(&mut buf, plot, &hollow(0.0, 3.0, 1.1, 1.4));
+
+        assert_eq!(grid(&buf, 3, 4), ["   ", "▗▄▖", "   ", "   "]);
+    }
+
+    #[test]
+    fn filled_and_hollow_dojis_are_identical() {
+        let plot = Rect::new(0, 0, 3, 5);
+        let geometry = |fill| CandleGeometry {
+            high_row: 0.0,
+            low_row: 5.0,
+            ..candle(0.0, 3.0, 2.0, 2.0, fill)
+        };
+
+        let mut filled_buf = buffer(3, 5);
+        draw_candle(&mut filled_buf, plot, &geometry(BodyFill::Filled));
+
+        let mut hollow_buf = buffer(3, 5);
+        draw_candle(&mut hollow_buf, plot, &geometry(BodyFill::Hollow));
+
+        // A single row has no interior, so fill makes no difference.
+        assert_eq!(filled_buf, hollow_buf);
     }
 
     #[test]
