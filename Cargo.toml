@@ -23,6 +23,7 @@ include = [
 
 [dependencies]
 ratatui-core = "0.1"
+ratatui-widgets = "0.3"
 
 [dev-dependencies]
 rand = "0.9"

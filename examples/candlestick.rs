@@ -42,16 +42,12 @@ fn run(
 }
 
 fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
-    let area = frame.area();
-
+    // Create a block to wrap the chart in.
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" chandelier: ACME daily (q to quit) ");
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
 
-    // The candle series owns the data and its bull/bear/wick colors. A neutral
-    // wick color, distinct from the bodies, keeps wicks legible against either.
+    // The candle series defines the data and sets rendering and style options.
     let series = CandleSeries::new(candles)
         .width(1.0)
         .gap(1.0)
@@ -59,15 +55,19 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         .bear_style(Color::Rgb(239, 83, 80))
         .wick_style(Color::Rgb(110, 116, 130));
 
-    // A dark chart background here is purely cosmetic. Partial bodies render
-    // correctly over the terminal default too, so the background is optional.
+    // Set the style for the price and time axes.
     let axis_style = Style::new().fg(Color::Rgb(120, 123, 134));
-    let chart = CandlestickChart::new(series)
-        .style(Style::new().bg(Color::Rgb(13, 17, 23)))
-        .price_axis(PriceAxis::default().style(axis_style))
-        .time_axis(TimeAxis::default().style(axis_style).labels(labels));
+    let time_axis = TimeAxis::default().style(axis_style).labels(labels);
+    let price_axis = PriceAxis::default().style(axis_style);
 
-    frame.render_widget(&chart, inner);
+    // Create the chart and provide the series and axes.
+    let chart = CandlestickChart::new(series)
+        .block(block)
+        .style(Style::new().bg(Color::Rgb(13, 17, 23)))
+        .price_axis(price_axis)
+        .time_axis(time_axis);
+
+    frame.render_widget(&chart, frame.area());
 }
 
 /// A synthetic price series. The generator is seeded so the example renders the

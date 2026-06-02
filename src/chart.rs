@@ -4,6 +4,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style, Styled};
 use ratatui_core::widgets::Widget;
+use ratatui_widgets::block::{Block, BlockExt};
 
 use crate::axis::{self, PriceAxis, TimeAxis};
 use crate::render::{PlotLayout, Series};
@@ -17,6 +18,7 @@ use crate::series::CandleSeries;
 /// recent candles that fit, right-aligned.
 #[derive(Debug, Clone)]
 pub struct CandlestickChart<'a> {
+    block: Option<Block<'a>>,
     series: CandleSeries<'a>,
     base: Style,
     pad_frac: f64,
@@ -29,6 +31,7 @@ impl<'a> CandlestickChart<'a> {
     /// Creates a chart that draws `series` with default axes and padding.
     pub fn new(series: CandleSeries<'a>) -> Self {
         Self {
+            block: None,
             series,
             base: Style::new(),
             pad_frac: 0.05,
@@ -74,24 +77,21 @@ impl<'a> CandlestickChart<'a> {
         self
     }
 
+    /// Wraps the chart with the given [`Block`]
+    #[must_use]
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
+        self
+    }
+
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {
-        if area.width == 0 || area.height == 0 {
-            return;
-        }
+        buf.set_style(area, self.base);
 
-        // Uniform background so the partial-cell inversion blends seamlessly.
+        self.block.as_ref().render(area, buf);
+        let chart_area = self.block.inner_if_some(area);
+
         let bg = self.base.bg.unwrap_or(Color::Reset);
-        let fill = self.base.bg(bg);
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_symbol(" ");
-                    cell.set_style(fill);
-                }
-            }
-        }
-
-        let Some(layout) = self.layout(area, bg) else {
+        let Some(layout) = self.layout(chart_area, bg) else {
             return;
         };
 
