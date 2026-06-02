@@ -101,20 +101,55 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     let row_bot = (bot_sub - 1) / SUB_Y;
     wick::draw(buf, plot, geometry, row_top, row_bot);
 
-    // The body fills every sub-cell column it spans. A hollow body lights only
-    // its border sub-cells; a body too small to have an interior renders solid.
-    let hollow = fill == BodyFill::Hollow;
+    // The body fills every sub-cell it spans. A hollow body lights only its
+    // border sub-cells; a body too small to have an interior renders solid.
+    let rect = SubRect {
+        left: left_sub,
+        right: right_sub,
+        top: top_sub,
+        bot: bot_sub,
+    };
+    fill_subcells(buf, plot, rect, fill == BodyFill::Hollow, body, bg);
+}
+
+/// A rectangle of sub-cells `[left, right) x [top, bot)` within a plot, in
+/// absolute sub-cell coordinates.
+pub(crate) struct SubRect {
+    pub left: u32,
+    pub right: u32,
+    pub top: u32,
+    pub bot: u32,
+}
+
+/// Fills `rect` with quadrant glyphs in `fg` over `bg`. When `hollow`, only the
+/// border sub-cells are lit, tracing a one sub-cell thick ring; a rectangle too
+/// small to have an interior is drawn solid either way.
+pub(crate) fn fill_subcells(
+    buf: &mut Buffer,
+    plot: Rect,
+    rect: SubRect,
+    hollow: bool,
+    fg: Color,
+    bg: Color,
+) {
+    let SubRect {
+        left,
+        right,
+        top,
+        bot,
+    } = rect;
+
     let mut subs: Vec<Sub> = Vec::new();
-    for x in left_sub..right_sub {
-        for y in top_sub..bot_sub {
-            let on_border = x == left_sub || x + 1 == right_sub || y == top_sub || y + 1 == bot_sub;
+    for x in left..right {
+        for y in top..bot {
+            let on_border = x == left || x + 1 == right || y == top || y + 1 == bot;
             if !hollow || on_border {
                 subs.push(Sub { x, y });
             }
         }
     }
 
-    accumulate(buf, plot, &subs, body, bg);
+    accumulate(buf, plot, &subs, fg, bg);
 }
 
 /// Folds lit sub-cells into quadrant glyphs, one cell per touched `(col, row)`,

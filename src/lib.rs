@@ -35,6 +35,7 @@
 
 mod axis;
 mod block;
+mod box_drawing;
 mod braille;
 mod chart;
 mod marker;
