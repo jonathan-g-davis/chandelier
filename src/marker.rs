@@ -1,6 +1,7 @@
 //! Glyph family selection for candle rendering.
 
 use crate::block::Block;
+use crate::box_drawing::BoxDrawing;
 use crate::braille::Braille;
 use crate::quadrant::Quadrant;
 use crate::render::Rasterizer;
@@ -32,6 +33,15 @@ pub enum Marker {
     /// footprint, so it is an outline of exactly the size of the filled body.
     /// Wick tips resolve to a half row, as with [`Block`](Self::Block).
     Quadrant,
+    /// Box-drawing glyphs (`─`, `│`, `┌`, `┴`, ...). A hollow body is traced as a
+    /// rectangle outline, and a wide enough body fuses its wick into the top and
+    /// bottom edges with tee glyphs. Because box-drawing lines run through the
+    /// center of a cell, body edges resolve to a whole row offset by half a row,
+    /// which is coarser than the other markers. Solid bodies, and outlines too
+    /// small to close, are filled with [`Quadrant`](Self::Quadrant) blocks inset
+    /// to the same bounds the outline traces, so a filled and a hollow body of
+    /// the same geometry occupy exactly the same space.
+    BoxDrawing,
 }
 
 impl Marker {
@@ -41,6 +51,7 @@ impl Marker {
             Self::Block => &Block,
             Self::Braille => &Braille,
             Self::Quadrant => &Quadrant,
+            Self::BoxDrawing => &BoxDrawing,
         }
     }
 }
