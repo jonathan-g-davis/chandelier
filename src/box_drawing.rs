@@ -18,10 +18,10 @@
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::Color;
+use ratatui_core::style::Style;
 
 use crate::quadrant::{self, SubRect};
-use crate::render::{BodyFill, CandleGeometry, Rasterizer};
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
 use crate::wick;
 
 /// Quadrant sub-cells per cell along each axis.
@@ -135,27 +135,12 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
         return;
     }
 
+    let style = Style::default().fg(geometry.body).bg(geometry.bg);
     if up {
-        set_cell(
-            buf,
-            plot,
-            center_col,
-            row_top,
-            "┴",
-            geometry.body,
-            geometry.bg,
-        );
+        render::put(buf, plot, center_col, row_top, "┴", style);
     }
     if down {
-        set_cell(
-            buf,
-            plot,
-            center_col,
-            row_bot,
-            "┬",
-            geometry.body,
-            geometry.bg,
-        );
+        render::put(buf, plot, center_col, row_bot, "┬", style);
     }
 }
 
@@ -168,8 +153,7 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
         col_right,
         ..
     } = footprint;
-    let fg = geometry.body;
-    let bg = geometry.bg;
+    let style = Style::default().fg(geometry.body).bg(geometry.bg);
 
     // Place the line at the cell whose center is nearest the body's midpoint.
     let mid = (geometry.body_top_row + geometry.body_bottom_row) / 2.0;
@@ -180,7 +164,7 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
     let (up, down) = wick::draw(buf, plot, geometry, row, row);
 
     for col in col_left..=col_right {
-        set_cell(buf, plot, col, row, "─", fg, bg);
+        render::put(buf, plot, col, row, "─", style);
     }
 
     // Fuse the meeting wicks into the body line at its center column: a cross
@@ -192,7 +176,7 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
         (false, false) => "─",
     };
     let center_col = geometry.center().floor() as u32;
-    set_cell(buf, plot, center_col, row, symbol, fg, bg);
+    render::put(buf, plot, center_col, row, symbol, style);
 }
 
 /// Fills `footprint` solid with quadrant blocks, inset to the same cell-center
@@ -241,42 +225,27 @@ fn draw_outline(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footpri
         col_left,
         col_right,
     } = footprint;
-    let fg = geometry.body;
-    let bg = geometry.bg;
+    let style = Style::default().fg(geometry.body).bg(geometry.bg);
 
-    set_cell(buf, plot, col_left, row_top, "┌", fg, bg);
-    set_cell(buf, plot, col_right, row_top, "┐", fg, bg);
-    set_cell(buf, plot, col_left, row_bot, "└", fg, bg);
-    set_cell(buf, plot, col_right, row_bot, "┘", fg, bg);
+    render::put(buf, plot, col_left, row_top, "┌", style);
+    render::put(buf, plot, col_right, row_top, "┐", style);
+    render::put(buf, plot, col_left, row_bot, "└", style);
+    render::put(buf, plot, col_right, row_bot, "┘", style);
 
     for col in (col_left + 1)..col_right {
-        set_cell(buf, plot, col, row_top, "─", fg, bg);
-        set_cell(buf, plot, col, row_bot, "─", fg, bg);
+        render::put(buf, plot, col, row_top, "─", style);
+        render::put(buf, plot, col, row_bot, "─", style);
     }
     for row in (row_top + 1)..row_bot {
-        set_cell(buf, plot, col_left, row, "│", fg, bg);
-        set_cell(buf, plot, col_right, row, "│", fg, bg);
-    }
-}
-
-/// Writes `symbol` at the plot-relative cell `(col, row)` in `fg` over `bg`,
-/// ignoring positions outside the plot.
-fn set_cell(buf: &mut Buffer, plot: Rect, col: u32, row: u32, symbol: &str, fg: Color, bg: Color) {
-    if col >= u32::from(plot.width) || row >= u32::from(plot.height) {
-        return;
-    }
-    let x = plot.x + col as u16;
-    let y = plot.y + row as u16;
-    if let Some(cell) = buf.cell_mut((x, y)) {
-        cell.set_symbol(symbol);
-        cell.fg = fg;
-        cell.bg = bg;
+        render::put(buf, plot, col_left, row, "│", style);
+        render::put(buf, plot, col_right, row, "│", style);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui_core::style::Color;
 
     const BODY: Color = Color::Rgb(0, 200, 120);
     const WICK: Color = Color::Rgb(110, 116, 130);

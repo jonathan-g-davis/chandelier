@@ -5,7 +5,7 @@
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::Color;
+use ratatui_core::style::{Color, Style};
 
 use crate::scale::{PriceScale, TimeScale};
 
@@ -108,6 +108,20 @@ pub(crate) fn quantize_span(start: f64, end: f64, scale: u32, max: u32) -> (u32,
 /// hollow body.
 pub(crate) fn on_border(x: u32, y: u32, left: u32, right: u32, top: u32, bot: u32) -> bool {
     x == left || x + 1 == right || y == top || y + 1 == bot
+}
+
+/// Writes `symbol` styled by `style` at the plot-relative cell `(col, row)`,
+/// ignoring positions outside the plot.
+pub(crate) fn put(buf: &mut Buffer, plot: Rect, col: u32, row: u32, symbol: &str, style: Style) {
+    if col >= u32::from(plot.width) || row >= u32::from(plot.height) {
+        return;
+    }
+    let x = plot.x + col as u16;
+    let y = plot.y + row as u16;
+    if let Some(cell) = buf.cell_mut((x, y)) {
+        cell.set_symbol(symbol);
+        cell.set_style(style);
+    }
 }
 
 /// A backend that paints fractional-row geometry into terminal cells.
