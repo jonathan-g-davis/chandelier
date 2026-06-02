@@ -4,14 +4,13 @@
 //! horizontal resolution of a whole cell. A candle's body arrives as
 //! fractional-row geometry and is quantized to a 2x2 sub-cell grid.
 //!
-//! Wicks are drawn by the shared [`wick`](crate::wick) module.
+//! Wicks are drawn by the shared [`wick`](crate::render::wick) module.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 
-use crate::render::{BodyFill, CandleGeometry, Rasterizer};
-use crate::wick;
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Quadrant-block rasterizer backend.
 ///
@@ -79,21 +78,11 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
     // Body endpoints to the nearest sub-cell row, at least one sub-cell tall so
     // a doji still shows a body.
-    let mut top_sub = (body_top_row * SUB_Y as f64).round() as u32;
-    let mut bot_sub = (body_bottom_row * SUB_Y as f64).round() as u32;
-    if bot_sub <= top_sub {
-        bot_sub = top_sub + 1;
-    }
-    bot_sub = bot_sub.min(max_sub_y);
-    top_sub = top_sub.min(bot_sub - 1);
+    let (top_sub, bot_sub) = render::quantize_span(body_top_row, body_bottom_row, SUB_Y, max_sub_y);
 
     // Body edges to the nearest sub-cell column, at least one sub-cell wide.
-    let left_sub = (body_left * f64::from(SUB_X)).round() as u32;
-    let mut right_sub = (body_right * f64::from(SUB_X)).round() as u32;
-    if right_sub <= left_sub {
-        right_sub = left_sub + 1;
-    }
-    let right_sub = right_sub.min(max_sub_x);
+    let (left_sub, right_sub) =
+        render::quantize_span(body_left, body_right, u32::from(SUB_X), max_sub_x);
 
     // The wick runs from the body's top and bottom cells out to the high and
     // low, drawn with line glyphs by the shared module.
@@ -142,8 +131,7 @@ pub(crate) fn fill_subcells(
     let mut subs: Vec<Sub> = Vec::new();
     for x in left..right {
         for y in top..bot {
-            let on_border = x == left || x + 1 == right || y == top || y + 1 == bot;
-            if !hollow || on_border {
+            if !hollow || render::on_border(x, y, left, right, top, bot) {
                 subs.push(Sub { x, y });
             }
         }

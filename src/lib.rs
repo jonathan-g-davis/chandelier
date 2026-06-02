@@ -34,16 +34,11 @@
 //!   each styled through its own [`PriceAxis`] and [`TimeAxis`].
 
 mod axis;
-mod block;
-mod box_drawing;
-mod braille;
 mod chart;
 mod marker;
-mod quadrant;
 mod render;
 mod scale;
 mod series;
-mod wick;
 
 pub use axis::{PriceAxis, TimeAxis};
 pub use chart::CandlestickChart;

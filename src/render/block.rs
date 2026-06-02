@@ -4,7 +4,7 @@
 //! colors to paint it in. This module owns everything specific to the block
 //! character set: quantizing a row to one of eight vertical steps and the
 //! foreground/background inversion that lets a body edge land between two rows.
-//! Wicks are drawn by the shared [`wick`](crate::wick) module.
+//! Wicks are drawn by the shared [`wick`](crate::render::wick) module.
 //!
 //! A body confined to a single row that touches neither the top nor the bottom
 //! of that cell is drawn flush to the cell bottom. Block glyphs fill from the
@@ -14,10 +14,9 @@
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Modifier};
+use ratatui_core::style::{Color, Modifier, Style};
 
-use crate::render::{BodyFill, CandleGeometry, Rasterizer};
-use crate::wick;
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Eighth-block rasterizer backend.
 ///
@@ -60,14 +59,8 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 
     // Body endpoints to the nearest eighth, at least one eighth tall so a doji
     // still shows a body.
-    let mut top_sub = (body_top_row * EIGHTHS_PER_ROW as f64).round() as u32;
-    let mut bot_sub = (body_bottom_row * EIGHTHS_PER_ROW as f64).round() as u32;
-
-    if bot_sub <= top_sub {
-        bot_sub = top_sub + 1;
-    }
-    bot_sub = bot_sub.min(max_sub);
-    top_sub = top_sub.min(bot_sub - 1);
+    let (top_sub, bot_sub) =
+        render::quantize_span(body_top_row, body_bottom_row, EIGHTHS_PER_ROW, max_sub);
 
     let row_top = top_sub / EIGHTHS_PER_ROW;
     let row_bot = (bot_sub - 1) / EIGHTHS_PER_ROW;
@@ -76,13 +69,14 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     // line glyphs at half-row tip resolution.
     wick::draw(buf, plot, geometry, row_top, row_bot);
 
-    // Body edges to the nearest whole column, at least one column wide.
-    let left_col = plot.x + body_left.round() as u16;
-    let mut right_col = plot.x + body_right.round() as u16;
+    // Body edges to the nearest whole column, at least one column wide,
+    // plot-relative.
+    let left_col = body_left.round() as u32;
+    let mut right_col = body_right.round() as u32;
     if right_col <= left_col {
         right_col = left_col + 1;
     }
-    let col_end = right_col.min(plot.x + plot.width);
+    let col_end = right_col.min(u32::from(plot.width));
 
     for row in row_top..=row_bot {
         let cell_top = row * EIGHTHS_PER_ROW;
@@ -93,10 +87,11 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
             continue;
         }
 
-        let y = plot.y + row as u16;
-
-        for cx in left_col..col_end {
-            set_body_cell(buf, cx, y, a as u16, b as u16, body, bg);
+        // The glyph and style depend only on the segment, so resolve them once
+        // per row and stamp every column in it.
+        let (symbol, style) = body_segment(a as u16, b as u16, body, bg);
+        for col in left_col..col_end {
+            render::put(buf, plot, col, row, symbol, style);
         }
     }
 
@@ -111,31 +106,31 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
 }
 
 /// Clears the cells strictly inside the body border (columns `[x_start, x_end)`,
-/// rows `row_top..=row_bot`) to `bg`, hollowing a filled body.
+/// rows `row_top..=row_bot`) to `bg`, hollowing a filled body. Coordinates are
+/// plot-relative.
 fn clear_body_interior(
     buf: &mut Buffer,
     plot: Rect,
-    x_start: u16,
-    x_end: u16,
+    x_start: u32,
+    x_end: u32,
     row_top: u32,
     row_bot: u32,
     bg: Color,
 ) {
+    // Ensure that the REVERSED modifier is unset.
+    let style = Style::default()
+        .fg(bg)
+        .bg(bg)
+        .remove_modifier(Modifier::REVERSED);
     for row in (row_top + 1)..row_bot {
-        let y = plot.y + row as u16;
-        for x in (x_start + 1)..(x_end - 1) {
-            if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_symbol(" ");
-                cell.fg = bg;
-                cell.bg = bg;
-                cell.modifier.remove(Modifier::REVERSED);
-            }
+        for col in (x_start + 1)..(x_end - 1) {
+            render::put(buf, plot, col, row, " ", style);
         }
     }
 }
 
-/// Fills the segment `[a, b)` (eighths from the top of the cell) at `(x, y)`
-/// with `fill`, drawing the remaining (empty) eighths in the `empty` color.
+/// The glyph and style for a body segment lit over `[a, b)` (eighths from the
+/// top of the cell), filled in `fill` over `empty`.
 ///
 /// A segment flush with the cell top sets the `REVERSED` attribute so the lit
 /// eighths sit at the top: the body goes in the cell background and the empty
@@ -143,7 +138,7 @@ fn clear_body_interior(
 /// draws. Doing the swap at display time (rather than swapping the colors here)
 /// lets `empty` be [`Color::Reset`], so a body renders correctly without a
 /// concrete chart background. Other segments are lit directly from the bottom.
-fn set_body_cell(buf: &mut Buffer, x: u16, y: u16, a: u16, b: u16, fill: Color, empty: Color) {
+fn body_segment(a: u16, b: u16, fill: Color, empty: Color) -> (&'static str, Style) {
     let eighths = EIGHTHS_PER_ROW as u16;
 
     let (symbol, reversed) = if b - a == eighths {
@@ -158,16 +153,14 @@ fn set_body_cell(buf: &mut Buffer, x: u16, y: u16, a: u16, b: u16, fill: Color, 
         (EIGHTHS[(b - a) as usize], false)
     };
 
-    if let Some(cell) = buf.cell_mut((x, y)) {
-        cell.set_symbol(symbol);
-        cell.fg = fill;
-        cell.bg = empty;
-        if reversed {
-            cell.modifier.insert(Modifier::REVERSED);
-        } else {
-            cell.modifier.remove(Modifier::REVERSED);
-        }
-    }
+    let style = Style::default().fg(fill).bg(empty);
+    let style = if reversed {
+        style.add_modifier(Modifier::REVERSED)
+    } else {
+        style.remove_modifier(Modifier::REVERSED)
+    };
+
+    (symbol, style)
 }
 
 #[cfg(test)]

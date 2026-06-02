@@ -18,11 +18,10 @@
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::Color;
+use ratatui_core::style::Style;
 
-use crate::quadrant::{self, SubRect};
-use crate::render::{BodyFill, CandleGeometry, Rasterizer};
-use crate::wick::{self, HALVES_PER_ROW};
+use crate::render::quadrant::{self, SubRect};
+use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Quadrant sub-cells per cell along each axis.
 const SUB: u32 = 2;
@@ -124,7 +123,7 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
 
     // The wick only paints cells outside the body's rows, so it never collides
     // with the outline drawn next.
-    wick::draw(buf, plot, geometry, row_top, row_bot);
+    let (up, down) = wick::draw(buf, plot, geometry, row_top, row_bot);
     draw_outline(buf, plot, geometry, footprint);
 
     // Fuse the wick into the body's edges with tee glyphs, but only when the
@@ -135,28 +134,12 @@ fn draw_hollow(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprin
         return;
     }
 
-    let (up, down) = wick_reach(plot, geometry, row_top, row_bot);
+    let style = Style::default().fg(geometry.body).bg(geometry.bg);
     if up {
-        set_cell(
-            buf,
-            plot,
-            center_col,
-            row_top,
-            "┴",
-            geometry.body,
-            geometry.bg,
-        );
+        render::put(buf, plot, center_col, row_top, "┴", style);
     }
     if down {
-        set_cell(
-            buf,
-            plot,
-            center_col,
-            row_bot,
-            "┬",
-            geometry.body,
-            geometry.bg,
-        );
+        render::put(buf, plot, center_col, row_bot, "┬", style);
     }
 }
 
@@ -169,8 +152,7 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
         col_right,
         ..
     } = footprint;
-    let fg = geometry.body;
-    let bg = geometry.bg;
+    let style = Style::default().fg(geometry.body).bg(geometry.bg);
 
     // Place the line at the cell whose center is nearest the body's midpoint.
     let mid = (geometry.body_top_row + geometry.body_bottom_row) / 2.0;
@@ -178,15 +160,14 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
     let row = (mid.floor() as u32).min(last_row);
 
     // The wick reaches above and below the single body row.
-    wick::draw(buf, plot, geometry, row, row);
+    let (up, down) = wick::draw(buf, plot, geometry, row, row);
 
     for col in col_left..=col_right {
-        set_cell(buf, plot, col, row, "─", fg, bg);
+        render::put(buf, plot, col, row, "─", style);
     }
 
     // Fuse the meeting wicks into the body line at its center column: a cross
     // when both reach, a tee for one, the plain line for neither.
-    let (up, down) = wick_reach(plot, geometry, row, row);
     let symbol = match (up, down) {
         (true, true) => "┼",
         (true, false) => "┴",
@@ -194,20 +175,7 @@ fn draw_flat(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footprint:
         (false, false) => "─",
     };
     let center_col = geometry.center().floor() as u32;
-    set_cell(buf, plot, center_col, row, symbol, fg, bg);
-}
-
-/// Whether the upper and lower wicks reach past the body's top and bottom cells.
-///
-/// Matches the [`wick`](crate::wick) module's half-row quantization so a tee is
-/// drawn exactly when that module actually paints a wick to the edge.
-fn wick_reach(plot: Rect, geometry: &CandleGeometry, row_top: u32, row_bot: u32) -> (bool, bool) {
-    let last_half = u32::from(plot.height) * HALVES_PER_ROW - 1;
-    let high_half = (geometry.high_row * f64::from(HALVES_PER_ROW)).round() as u32;
-    let low_half = ((geometry.low_row * f64::from(HALVES_PER_ROW)).round() as u32).min(last_half);
-    let up = high_half < row_top * HALVES_PER_ROW;
-    let down = low_half >= (row_bot + 1) * HALVES_PER_ROW;
-    (up, down)
+    render::put(buf, plot, center_col, row, symbol, style);
 }
 
 /// Fills `footprint` solid with quadrant blocks, inset to the same cell-center
@@ -256,42 +224,27 @@ fn draw_outline(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry, footpri
         col_left,
         col_right,
     } = footprint;
-    let fg = geometry.body;
-    let bg = geometry.bg;
+    let style = Style::default().fg(geometry.body).bg(geometry.bg);
 
-    set_cell(buf, plot, col_left, row_top, "┌", fg, bg);
-    set_cell(buf, plot, col_right, row_top, "┐", fg, bg);
-    set_cell(buf, plot, col_left, row_bot, "└", fg, bg);
-    set_cell(buf, plot, col_right, row_bot, "┘", fg, bg);
+    render::put(buf, plot, col_left, row_top, "┌", style);
+    render::put(buf, plot, col_right, row_top, "┐", style);
+    render::put(buf, plot, col_left, row_bot, "└", style);
+    render::put(buf, plot, col_right, row_bot, "┘", style);
 
     for col in (col_left + 1)..col_right {
-        set_cell(buf, plot, col, row_top, "─", fg, bg);
-        set_cell(buf, plot, col, row_bot, "─", fg, bg);
+        render::put(buf, plot, col, row_top, "─", style);
+        render::put(buf, plot, col, row_bot, "─", style);
     }
     for row in (row_top + 1)..row_bot {
-        set_cell(buf, plot, col_left, row, "│", fg, bg);
-        set_cell(buf, plot, col_right, row, "│", fg, bg);
-    }
-}
-
-/// Writes `symbol` at the plot-relative cell `(col, row)` in `fg` over `bg`,
-/// ignoring positions outside the plot.
-fn set_cell(buf: &mut Buffer, plot: Rect, col: u32, row: u32, symbol: &str, fg: Color, bg: Color) {
-    if col >= u32::from(plot.width) || row >= u32::from(plot.height) {
-        return;
-    }
-    let x = plot.x + col as u16;
-    let y = plot.y + row as u16;
-    if let Some(cell) = buf.cell_mut((x, y)) {
-        cell.set_symbol(symbol);
-        cell.fg = fg;
-        cell.bg = bg;
+        render::put(buf, plot, col_left, row, "│", style);
+        render::put(buf, plot, col_right, row, "│", style);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui_core::style::Color;
 
     const BODY: Color = Color::Rgb(0, 200, 120);
     const WICK: Color = Color::Rgb(110, 116, 130);

@@ -1,10 +1,6 @@
 //! Glyph family selection for candle rendering.
 
-use crate::block::Block;
-use crate::box_drawing::BoxDrawing;
-use crate::braille::Braille;
-use crate::quadrant::Quadrant;
-use crate::render::Rasterizer;
+use crate::render::{Block, BoxDrawing, Braille, Quadrant, Rasterizer};
 
 /// The glyph family a chart rasterizes candles with.
 ///
