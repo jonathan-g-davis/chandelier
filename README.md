@@ -1,5 +1,10 @@
 # chandelier
 
+[![crates.io](https://img.shields.io/crates/v/chandelier.svg)](https://crates.io/crates/chandelier)
+[![Documentation](https://docs.rs/chandelier/badge.svg)](https://docs.rs/chandelier)
+[![CI](https://github.com/jonathan-g-davis/chandelier/actions/workflows/ci.yml/badge.svg)](https://github.com/jonathan-g-davis/chandelier/actions/workflows/ci.yml)
+[![MIT/Apache 2.0 licensed](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
 Financial charting widgets for [Ratatui](https://ratatui.rs).
 
 ## Usage
