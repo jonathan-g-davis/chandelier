@@ -7,7 +7,8 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
 
-use crate::render::{BodyFill, CandleGeometry, PlotLayout, Rasterizer, Series};
+use crate::marker::Marker;
+use crate::render::{BodyFill, CandleGeometry, PlotLayout, Series};
 use crate::scale::TimeScale;
 
 /// A single open/high/low/close bar.
@@ -76,9 +77,10 @@ pub fn price_bounds(candles: &[Candle]) -> Option<(f64, f64)> {
 
 /// A series of candles together with how it is drawn.
 ///
-/// This is the dataset a [`CandlestickChart`](crate::CandlestickChart) renders:
-/// the bars plus their bull/bear/wick styles and the column geometry. It owns no
-/// axes or scale; the chart supplies those when it draws the series.
+/// This is the dataset a [`CandlestickChart`](crate::CandlestickChart) renders.
+///
+/// Rendering can be customized with the [`marker`](Self::marker) method. The
+/// [`width`](Self::width) and [`gap`](Self::gap) methods set the column geometry.
 #[derive(Debug, Clone)]
 pub struct CandleSeries<'a> {
     pub(crate) candles: &'a [Candle],
@@ -87,6 +89,7 @@ pub struct CandleSeries<'a> {
     wick: Option<Style>,
     bull_fill: BodyFill,
     bear_fill: BodyFill,
+    marker: Marker,
     pub(crate) width: f64,
     pub(crate) gap: f64,
 }
@@ -102,6 +105,7 @@ impl<'a> CandleSeries<'a> {
             wick: None,
             bull_fill: BodyFill::Filled,
             bear_fill: BodyFill::Filled,
+            marker: Marker::default(),
             width: 3.0,
             gap: 1.0,
         }
@@ -152,6 +156,14 @@ impl<'a> CandleSeries<'a> {
     #[must_use]
     pub fn bear_fill(mut self, fill: BodyFill) -> Self {
         self.bear_fill = fill;
+        self
+    }
+
+    /// Sets the glyph family the candles are drawn with. Defaults to
+    /// [`Marker::Block`].
+    #[must_use]
+    pub fn marker(mut self, marker: Marker) -> Self {
+        self.marker = marker;
         self
     }
 
@@ -210,7 +222,8 @@ impl Series for CandleSeries<'_> {
         TimeScale::new(plot.width, self.candles.len(), self.width, self.gap)
     }
 
-    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout, rasterizer: &dyn Rasterizer) {
+    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
+        let rasterizer = self.marker.rasterizer();
         let plot = layout.plot;
         let scale = layout.price;
         let time = layout.time;

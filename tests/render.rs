@@ -256,9 +256,13 @@ fn default_marker_is_block() {
     ];
     let default =
         CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0)).axes(false);
-    let explicit = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
-        .axes(false)
-        .marker(Marker::Block);
+    let explicit = CandlestickChart::new(
+        CandleSeries::new(&candles)
+            .width(3.0)
+            .gap(1.0)
+            .marker(Marker::Block),
+    )
+    .axes(false);
 
     let want = render(&default, 12, 8);
     let got = render(&explicit, 12, 8);
@@ -273,9 +277,13 @@ fn braille_marker_renders_braille_cells_for_a_known_candle() {
     // wide, so its center is the seam between the two columns and the wick lands
     // on the left dot of the second column.
     let candles = [Candle::new(100.0, 130.0, 70.0, 110.0)];
-    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(2.0).gap(0.0))
-        .axes(false)
-        .marker(Marker::Braille);
+    let chart = CandlestickChart::new(
+        CandleSeries::new(&candles)
+            .width(2.0)
+            .gap(0.0)
+            .marker(Marker::Braille),
+    )
+    .axes(false);
     let buf = render(&chart, 2, 8);
 
     let grid = glyph_grid(&buf);
@@ -310,9 +318,13 @@ fn quadrant_marker_renders_quadrant_and_box_glyphs() {
     // candle's center column above and below the body using the block line
     // glyphs.
     let candles = [Candle::new(100.0, 130.0, 70.0, 110.0)];
-    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(2.0).gap(0.0))
-        .axes(false)
-        .marker(Marker::Quadrant);
+    let chart = CandlestickChart::new(
+        CandleSeries::new(&candles)
+            .width(2.0)
+            .gap(0.0)
+            .marker(Marker::Quadrant),
+    )
+    .axes(false);
     let buf = render(&chart, 2, 8);
 
     let grid = glyph_grid(&buf);
@@ -353,10 +365,9 @@ fn quadrant_hollow_body_traces_a_sub_cell_border() {
     let series = CandleSeries::new(&candles)
         .width(5.0)
         .bull_style(bull)
-        .bull_fill(BodyFill::Hollow);
-    let chart = CandlestickChart::new(series)
-        .axes(false)
+        .bull_fill(BodyFill::Hollow)
         .marker(Marker::Quadrant);
+    let chart = CandlestickChart::new(series).axes(false);
     let buf = render(&chart, 8, 12);
 
     let symbols: String = glyph_grid(&buf).concat();
