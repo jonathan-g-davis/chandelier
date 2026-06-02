@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/jonathan-g-davis/chandelier/compare/v0.1.0...v0.2.0) - 2026-06-02
+
+### Other
+
+- Add axis label alignment ([#11](https://github.com/jonathan-g-davis/chandelier/pull/11))
+- Add block wrapping to chart ([#10](https://github.com/jonathan-g-davis/chandelier/pull/10))
+- Move marker to CandleSeries ([#9](https://github.com/jonathan-g-davis/chandelier/pull/9))
+- Render refactor ([#8](https://github.com/jonathan-g-davis/chandelier/pull/8))
+- Add box drawing backend ([#7](https://github.com/jonathan-g-davis/chandelier/pull/7))
+- Add quadrants backend ([#6](https://github.com/jonathan-g-davis/chandelier/pull/6))
+- Add fill styles ([#5](https://github.com/jonathan-g-davis/chandelier/pull/5))
+- Braille rendering backend ([#3](https://github.com/jonathan-g-davis/chandelier/pull/3))
+
 ## [0.1.0](https://github.com/jonathan-g-davis/chandelier/releases/tag/v0.1.0) - 2026-05-31
 
 Initial release. A candlestick chart widget for Ratatui.
