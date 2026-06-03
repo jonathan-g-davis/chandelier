@@ -25,15 +25,15 @@ pub(crate) use quadrant::Quadrant;
 /// A container computes this once for the drawn area and shares it with
 /// downstream components such as series, labels, and overlays.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PlotLayout {
+pub(crate) struct PlotLayout {
     /// The rectangle the data is drawn into, excluding any axis gutters.
-    pub plot: Rect,
+    pub(crate) plot: Rect,
     /// Maps prices onto the rows of `plot`.
-    pub price: PriceScale,
+    pub(crate) price: PriceScale,
     /// Maps candle indices onto the columns of `plot`.
-    pub time: TimeScale,
+    pub(crate) time: TimeScale,
     /// The color the plot was filled with, which partial cells blend against.
-    pub bg: Color,
+    pub(crate) bg: Color,
 }
 
 /// Whether a candle body is drawn solid or as an outline.

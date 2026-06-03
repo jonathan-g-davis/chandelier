@@ -16,13 +16,13 @@
 /// Row `0.0` is the top of the plot and higher values map to smaller row
 /// values, matching screen coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ValueScale {
+pub(crate) struct ValueScale {
     min: f64,
     max: f64,
     height: u16,
 }
 
-pub type PriceScale = ValueScale;
+pub(crate) type PriceScale = ValueScale;
 
 impl ValueScale {
     /// Builds a scale over `[min, max]` for a plot `height` in rows.
@@ -60,6 +60,7 @@ impl ValueScale {
     }
 
     /// Plot height in rows.
+    #[allow(unused)]
     pub fn height(&self) -> u16 {
         self.height
     }
@@ -75,6 +76,7 @@ impl ValueScale {
     /// Inverse of [`value_to_row_f64`](Self::value_to_row_f64): turns a fractional
     /// row back into a value. Not clamped, so it round-trips values outside the
     /// domain as well.
+    #[allow(unused)] // This will be used for crosshairs in the future
     pub fn row_f64_to_value(&self, row_f: f64) -> f64 {
         let frac = 1.0 - row_f / f64::from(self.height);
         self.min + frac * (self.max - self.min)
@@ -94,7 +96,7 @@ impl ValueScale {
 /// recent candles that fit are shown, right-aligned, so a growing series scrolls
 /// like a real chart instead of overflowing.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TimeScale {
+pub(crate) struct TimeScale {
     width: u16,
     candle_width: f64,
     gap: f64,
@@ -163,6 +165,7 @@ impl TimeScale {
     /// Inverse of [`index_to_left`](Self::index_to_left): the visible candle a
     /// column falls in, or `None` for a gap or out-of-range column. A column is
     /// matched when its center lands within a candle's fractional body span.
+    #[allow(unused)] // This will be used for crosshairs in the future
     pub fn col_to_index(&self, col: u16) -> Option<usize> {
         if col >= self.width {
             return None;
