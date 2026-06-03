@@ -181,7 +181,7 @@ fn nice_num(span: f64, round: bool) -> f64 {
 
 /// Picks roughly `target` evenly-spaced, round-numbered price ticks spanning
 /// `[min, max]`. Ticks outside the domain are dropped by the caller as needed.
-pub(crate) fn price_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
+pub(crate) fn value_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
     let target = target.max(2);
     let range = nice_num(max - min, false);
     let step = nice_num(range / (target as f64 - 1.0), true);
@@ -249,7 +249,7 @@ pub(crate) fn draw_value_axis(
     axis: &ValueAxis,
     format: &dyn Fn(f64, f64) -> String,
 ) {
-    let ticks = price_ticks(scale.min(), scale.max(), 6);
+    let ticks = value_ticks(scale.min(), scale.max(), 6);
     let step = if ticks.len() >= 2 {
         ticks[1] - ticks[0]
     } else {
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn ticks_are_round_and_evenly_spaced() {
-        let ticks = price_ticks(0.0, 100.0, 6);
+        let ticks = value_ticks(0.0, 100.0, 6);
         assert!(ticks.len() >= 2);
         let step = ticks[1] - ticks[0];
         // The step is a nice number, and spacing is uniform.
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn ticks_bracket_the_domain() {
-        let ticks = price_ticks(13.0, 87.0, 5);
+        let ticks = value_ticks(13.0, 87.0, 5);
         assert!(ticks.first().unwrap() <= &13.0);
         assert!(ticks.last().unwrap() >= &87.0);
     }
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn degenerate_span_does_not_panic() {
-        let ticks = price_ticks(50.0, 50.0, 6);
+        let ticks = value_ticks(50.0, 50.0, 6);
         assert!(!ticks.is_empty());
         assert!(ticks.iter().all(|t| t.is_finite()));
     }

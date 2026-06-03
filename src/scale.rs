@@ -42,7 +42,7 @@ impl ValueScale {
         }
     }
 
-    /// Builds a scale from the candles' price bounds, padded by `pad_frac` of
+    /// Builds a scale from the series' value bounds, padded by `pad_frac` of
     /// the span on each end (e.g. `0.05` for 5% headroom top and bottom).
     pub fn autoscale(min: f64, max: f64, height: u16, pad_frac: f64) -> Self {
         let pad = (max - min).abs() * pad_frac;

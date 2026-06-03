@@ -102,7 +102,7 @@ impl<'a> CandlestickChart<'a> {
             axis::draw_value_axis(
                 buf,
                 layout.plot,
-                &layout.price,
+                &layout.value,
                 &self.price_axis,
                 &|v, step| axis::format_price(v, step),
             );
@@ -135,12 +135,12 @@ impl<'a> CandlestickChart<'a> {
         };
 
         let (lo, hi) = self.series.value_bounds()?;
-        let price = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
+        let value = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
         let time = self.series.time_scale(plot);
 
         Some(PlotLayout {
             plot,
-            price,
+            value,
             time,
             bg,
         })

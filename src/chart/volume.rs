@@ -108,7 +108,7 @@ impl<'a> VolumeChart<'a> {
             axis::draw_value_axis(
                 buf,
                 layout.plot,
-                &layout.price,
+                &layout.value,
                 &self.value_axis,
                 &|v, step| axis::format_volume(v, step),
             );
@@ -141,12 +141,12 @@ impl<'a> VolumeChart<'a> {
         };
 
         let (_, hi) = self.series.value_bounds()?;
-        let price = ValueScale::new(0.0, hi * (1.0 + self.pad_frac), plot.height);
+        let value = ValueScale::new(0.0, hi * (1.0 + self.pad_frac), plot.height);
         let time = self.series.time_scale(plot);
 
         Some(PlotLayout {
             plot,
-            price,
+            value,
             time,
             bg,
         })

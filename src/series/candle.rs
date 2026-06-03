@@ -235,7 +235,7 @@ impl Series for CandleSeries<'_> {
     fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
         let rasterizer = self.marker.rasterizer();
         let plot = layout.plot;
-        let scale = layout.price;
+        let scale = layout.value;
         let time = layout.time;
         let bg = layout.bg;
 

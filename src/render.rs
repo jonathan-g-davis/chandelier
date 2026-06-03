@@ -7,7 +7,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
 
-use crate::scale::{PriceScale, TimeScale};
+use crate::scale::{TimeScale, ValueScale};
 
 mod block;
 mod box_drawing;
@@ -29,8 +29,8 @@ pub(crate) use quadrant::Quadrant;
 pub(crate) struct PlotLayout {
     /// The rectangle the data is drawn into, excluding any axis gutters.
     pub(crate) plot: Rect,
-    /// Maps prices onto the rows of `plot`.
-    pub(crate) price: PriceScale,
+    /// Maps values onto the rows of `plot`.
+    pub(crate) value: ValueScale,
     /// Maps candle indices onto the columns of `plot`.
     pub(crate) time: TimeScale,
     /// The color the plot was filled with, which partial cells blend against.
