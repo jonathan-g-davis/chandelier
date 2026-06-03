@@ -214,7 +214,7 @@ impl<'a> CandleSeries<'a> {
 }
 
 impl Series for CandleSeries<'_> {
-    fn price_bounds(&self) -> Option<(f64, f64)> {
+    fn value_bounds(&self) -> Option<(f64, f64)> {
         price_bounds(self.candles)
     }
 

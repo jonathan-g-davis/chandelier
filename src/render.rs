@@ -149,9 +149,9 @@ pub(crate) trait Rasterizer {
 /// A series produces fractional-row geometry and colors and paints it through a
 /// [`Rasterizer`].
 pub(crate) trait Series {
-    /// The price span the data occupies, or `None` when there is nothing to
-    /// draw. The container autoscales the price axis from this.
-    fn price_bounds(&self) -> Option<(f64, f64)>;
+    /// The value span the data occupies, or `None` when there is nothing to
+    /// draw. The container autoscales the value axis from this.
+    fn value_bounds(&self) -> Option<(f64, f64)>;
 
     /// Lays out this series' columns into `plot`, choosing which entries are in
     /// view.

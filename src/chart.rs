@@ -134,7 +134,7 @@ impl<'a> CandlestickChart<'a> {
             height: area.height - bottom_axis_h,
         };
 
-        let (lo, hi) = self.series.price_bounds()?;
+        let (lo, hi) = self.series.value_bounds()?;
         let price = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
         let time = self.series.time_scale(plot);
 
