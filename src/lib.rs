@@ -26,6 +26,7 @@
 //! # What it draws
 //!
 //! - A candlestick chart that autoscales to the data in view.
+//! - A volume chart that autoscales to the data in view.
 //! - Sub-cell body endpoints: open and close levels are placed to the nearest
 //!   eighth of a row with partial block characters instead of snapping to whole
 //!   rows. These render correctly over any background, including the terminal
@@ -40,9 +41,8 @@ mod render;
 mod scale;
 mod series;
 
-pub use axis::{PriceAxis, TimeAxis};
-pub use chart::CandlestickChart;
+pub use axis::{PriceAxis, TimeAxis, ValueAxis};
+pub use chart::{CandlestickChart, VolumeChart};
 pub use marker::Marker;
-pub use render::{BodyFill, PlotLayout};
-pub use scale::{PriceScale, TimeScale};
-pub use series::{Candle, CandleSeries, price_bounds};
+pub use render::BodyFill;
+pub use series::{Candle, CandleSeries, Direction, Volume, VolumeSeries, price_bounds};

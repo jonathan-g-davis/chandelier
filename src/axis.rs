@@ -1,25 +1,33 @@
 //! The chart's two axes and the tick selection behind them.
 //!
-//! [`PriceAxis`] and [`TimeAxis`] are small style-and-layout configurations the
-//! chart composes; the tick helpers pick where price labels go and how they read.
+//! [`ValueAxis`] and [`TimeAxis`] are small style-and-layout configurations the
+//! chart composes. The tick helpers pick where value labels go and how they read.
 
-use ratatui_core::layout::Alignment;
+use ratatui_core::buffer::Buffer;
+use ratatui_core::layout::{Alignment, Rect};
 use ratatui_core::style::{Color, Style, Styled};
 
-/// Configuration for the price (vertical) axis.
+use crate::scale::{TimeScale, ValueScale};
+
+/// Configuration for a vertical value axis, such as a chart's price or volume
+/// axis.
 ///
 /// Carries how the labels are styled, how many columns the axis reserves on the
 /// right, and how the labels sit within those columns. The value range and tick
-/// positions are chosen automatically from the data in view.
+/// positions are chosen automatically from the data in view, and how each value
+/// reads as a label is chosen by the chart that draws the axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PriceAxis {
+pub struct ValueAxis {
     pub(crate) style: Style,
     pub(crate) width: u16,
     pub(crate) labels_alignment: Alignment,
 }
 
-impl PriceAxis {
-    /// A price axis with gray, right-aligned labels reserving eight columns.
+/// The vertical axis of a [`CandlestickChart`](crate::CandlestickChart).
+pub type PriceAxis = ValueAxis;
+
+impl ValueAxis {
+    /// A value axis with gray, right-aligned labels reserving eight columns.
     pub fn new() -> Self {
         Self {
             style: Style::new().fg(Color::Gray),
@@ -50,14 +58,14 @@ impl PriceAxis {
     }
 }
 
-impl Default for PriceAxis {
+impl Default for ValueAxis {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Styled for PriceAxis {
-    type Item = PriceAxis;
+impl Styled for ValueAxis {
+    type Item = ValueAxis;
 
     fn style(&self) -> Style {
         self.style
@@ -173,7 +181,7 @@ fn nice_num(span: f64, round: bool) -> f64 {
 
 /// Picks roughly `target` evenly-spaced, round-numbered price ticks spanning
 /// `[min, max]`. Ticks outside the domain are dropped by the caller as needed.
-pub(crate) fn price_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
+pub(crate) fn value_ticks(min: f64, max: f64, target: usize) -> Vec<f64> {
     let target = target.max(2);
     let range = nice_num(max - min, false);
     let step = nice_num(range / (target as f64 - 1.0), true);
@@ -213,13 +221,95 @@ pub(crate) fn format_price(value: f64, step: f64) -> String {
     format!("{value:.decimals$}")
 }
 
+/// Formats a volume for an axis label with a magnitude suffix ('K', 'M', 'B').
+pub(crate) fn format_volume(value: f64, _step: f64) -> String {
+    let abs = value.abs();
+    let (scaled, suffix) = if abs >= 1e9 {
+        (value / 1e9, "B")
+    } else if abs >= 1e6 {
+        (value / 1e6, "M")
+    } else if abs >= 1e3 {
+        (value / 1e3, "K")
+    } else {
+        return format!("{value:.0}");
+    };
+
+    let decimals = if scaled.abs() >= 100.0 { 0 } else { 1 };
+    format!("{scaled:.decimals$}{suffix}")
+}
+
+/// Draws the right-hand value axis.
+///
+/// Ticks are round-number ticks across the scale. Labels are formatted by the
+/// provided function and aligned within the axis columns.
+pub(crate) fn draw_value_axis(
+    buf: &mut Buffer,
+    plot: Rect,
+    scale: &ValueScale,
+    axis: &ValueAxis,
+    format: &dyn Fn(f64, f64) -> String,
+) {
+    let ticks = value_ticks(scale.min(), scale.max(), 6);
+    let step = if ticks.len() >= 2 {
+        ticks[1] - ticks[0]
+    } else {
+        1.0
+    };
+    let axis_x = plot.x + plot.width;
+    let width = axis.width as usize;
+
+    for &t in ticks.iter() {
+        if t < scale.min() || t > scale.max() {
+            continue;
+        }
+
+        let row = scale.value_to_row(t);
+        let label = format(t, step);
+        let padded = match axis.labels_alignment {
+            Alignment::Left => format!("{label:<width$}"),
+            Alignment::Center => format!("{label:^width$}"),
+            Alignment::Right => format!("{label:>width$}"),
+        };
+        buf.set_string(axis_x, plot.y + row, padded, axis.style);
+    }
+}
+
+/// Draws the bottom time axis.
+///
+/// Labels are aligned relative to a candle's center column. Labels that would
+/// overlap a previous one are skipped to avoid collisions.
+pub(crate) fn draw_time_axis(buf: &mut Buffer, plot: Rect, time: &TimeScale, axis: &TimeAxis<'_>) {
+    let y = plot.y + plot.height;
+    let mut next_free: u16 = plot.x;
+
+    for vi in 0..time.visible() {
+        let orig = time.first_visible() + vi;
+        let label = match axis.labels {
+            Some(labels) if orig < labels.len() => labels[orig].clone(),
+            _ => orig.to_string(),
+        };
+        let cx = plot.x + time.index_to_center_col(vi);
+        let len = label.chars().count() as u16;
+        let start = match axis.labels_alignment {
+            Alignment::Left => cx,
+            Alignment::Center => cx.saturating_sub(len / 2),
+            Alignment::Right => cx.saturating_sub(len.saturating_sub(1)),
+        };
+
+        if start >= next_free && start + len <= plot.x + plot.width {
+            buf.set_string(start, y, &label, axis.style);
+            next_free = start + len + 2;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn ticks_are_round_and_evenly_spaced() {
-        let ticks = price_ticks(0.0, 100.0, 6);
+        let ticks = value_ticks(0.0, 100.0, 6);
         assert!(ticks.len() >= 2);
         let step = ticks[1] - ticks[0];
         // The step is a nice number, and spacing is uniform.
@@ -231,7 +321,7 @@ mod tests {
 
     #[test]
     fn ticks_bracket_the_domain() {
-        let ticks = price_ticks(13.0, 87.0, 5);
+        let ticks = value_ticks(13.0, 87.0, 5);
         assert!(ticks.first().unwrap() <= &13.0);
         assert!(ticks.last().unwrap() >= &87.0);
     }
@@ -245,8 +335,19 @@ mod tests {
     }
 
     #[test]
+    fn format_volume_scales_to_compact_suffixes() {
+        assert_eq!(format_volume(0.0, 0.0), "0");
+        assert_eq!(format_volume(500.0, 0.0), "500");
+        assert_eq!(format_volume(1_500.0, 0.0), "1.5K");
+        assert_eq!(format_volume(950_000.0, 0.0), "950K");
+        assert_eq!(format_volume(1_200_000.0, 0.0), "1.2M");
+        assert_eq!(format_volume(12_500_000.0, 0.0), "12.5M");
+        assert_eq!(format_volume(1_000_000_000.0, 0.0), "1.0B");
+    }
+
+    #[test]
     fn degenerate_span_does_not_panic() {
-        let ticks = price_ticks(50.0, 50.0, 6);
+        let ticks = value_ticks(50.0, 50.0, 6);
         assert!(!ticks.is_empty());
         assert!(ticks.iter().all(|t| t.is_finite()));
     }

@@ -7,7 +7,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style};
 
-use crate::scale::{PriceScale, TimeScale};
+use crate::scale::{TimeScale, ValueScale};
 
 mod block;
 mod box_drawing;
@@ -16,6 +16,7 @@ mod quadrant;
 mod wick;
 
 pub(crate) use block::Block;
+pub(crate) use block::draw_bar;
 pub(crate) use box_drawing::BoxDrawing;
 pub(crate) use braille::Braille;
 pub(crate) use quadrant::Quadrant;
@@ -25,15 +26,15 @@ pub(crate) use quadrant::Quadrant;
 /// A container computes this once for the drawn area and shares it with
 /// downstream components such as series, labels, and overlays.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PlotLayout {
+pub(crate) struct PlotLayout {
     /// The rectangle the data is drawn into, excluding any axis gutters.
-    pub plot: Rect,
-    /// Maps prices onto the rows of `plot`.
-    pub price: PriceScale,
+    pub(crate) plot: Rect,
+    /// Maps values onto the rows of `plot`.
+    pub(crate) value: ValueScale,
     /// Maps candle indices onto the columns of `plot`.
-    pub time: TimeScale,
+    pub(crate) time: TimeScale,
     /// The color the plot was filled with, which partial cells blend against.
-    pub bg: Color,
+    pub(crate) bg: Color,
 }
 
 /// Whether a candle body is drawn solid or as an outline.
@@ -95,6 +96,20 @@ impl CandleGeometry {
     }
 }
 
+/// One bar's geometry and colors.
+pub(crate) struct BarGeometry {
+    /// The fractional column of the left edge of the bar.
+    pub left: f64,
+    /// The fractional column of the right edge of the bar.
+    pub right: f64,
+    /// The fractional row of the top of the bar.
+    pub value_row: f64,
+    /// The color of the bar.
+    pub color: Color,
+    /// The color the empty portion of a partially filled cell is painted.
+    pub bg: Color,
+}
+
 /// Quantizes a body edge span `[start, end)` (in fractional rows or columns) to
 /// a backend's sub-cell grid.
 ///
@@ -149,9 +164,9 @@ pub(crate) trait Rasterizer {
 /// A series produces fractional-row geometry and colors and paints it through a
 /// [`Rasterizer`].
 pub(crate) trait Series {
-    /// The price span the data occupies, or `None` when there is nothing to
-    /// draw. The container autoscales the price axis from this.
-    fn price_bounds(&self) -> Option<(f64, f64)>;
+    /// The value span the data occupies, or `None` when there is nothing to
+    /// draw. The container autoscales the value axis from this.
+    fn value_bounds(&self) -> Option<(f64, f64)>;
 
     /// Lays out this series' columns into `plot`, choosing which entries are in
     /// view.

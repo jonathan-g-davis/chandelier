@@ -16,7 +16,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
 
-use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
+use crate::render::{self, BarGeometry, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Eighth-block rasterizer backend.
 ///
@@ -87,8 +87,6 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
             continue;
         }
 
-        // The glyph and style depend only on the segment, so resolve them once
-        // per row and stamp every column in it.
         let (symbol, style) = body_segment(a as u16, b as u16, body, bg);
         for col in left_col..col_end {
             render::put(buf, plot, col, row, symbol, style);
@@ -102,6 +100,54 @@ pub(crate) fn draw_candle(buf: &mut Buffer, plot: Rect, geometry: &CandleGeometr
     // have nothing to clear and stay solid.
     if fill == BodyFill::Hollow && col_end.saturating_sub(left_col) >= 3 {
         clear_body_interior(buf, plot, left_col, col_end, row_top, row_bot, bg);
+    }
+}
+
+/// Draws one bottom-anchored bar into `plot`.
+pub(crate) fn draw_bar(buf: &mut Buffer, plot: Rect, geometry: &BarGeometry) {
+    if plot.width == 0 || plot.height == 0 {
+        return;
+    }
+
+    let BarGeometry {
+        left,
+        right,
+        value_row,
+        color,
+        bg,
+    } = *geometry;
+
+    let max_sub = u32::from(plot.height) * EIGHTHS_PER_ROW;
+
+    // The top of the bar resolves to the nearest eighth. At least one eighth
+    // tall so a small bar stays visible.
+    let (top_sub, bot_sub) =
+        render::quantize_span(value_row, f64::from(plot.height), EIGHTHS_PER_ROW, max_sub);
+
+    let row_top = top_sub / EIGHTHS_PER_ROW;
+    let row_bot = (bot_sub - 1) / EIGHTHS_PER_ROW;
+
+    // Bar edges to the nearest whole column, at least one column wide.
+    let left_col = left.round() as u32;
+    let mut right_col = right.round() as u32;
+    if right_col <= left_col {
+        right_col = left_col + 1;
+    }
+    let col_end = right_col.min(u32::from(plot.width));
+
+    for row in row_top..=row_bot {
+        let cell_top = row * EIGHTHS_PER_ROW;
+        let a = top_sub.max(cell_top) - cell_top;
+        let b = bot_sub.min(cell_top + EIGHTHS_PER_ROW) - cell_top;
+
+        if b <= a {
+            continue;
+        }
+
+        let (symbol, style) = body_segment(a as u16, b as u16, color, bg);
+        for col in left_col..col_end {
+            render::put(buf, plot, col, row, symbol, style);
+        }
     }
 }
 
@@ -377,5 +423,75 @@ mod tests {
                 assert_eq!(buf[(x, y)].symbol(), "█", "cell ({x}, {y}) stays solid");
             }
         }
+    }
+
+    /// A bar spanning columns `[left, right)` topped at `value_row`.
+    fn bar(left: f64, right: f64, value_row: f64) -> BarGeometry {
+        BarGeometry {
+            left,
+            right,
+            value_row,
+            color: BODY,
+            bg: BG,
+        }
+    }
+
+    #[test]
+    fn bar_fills_full_height_with_solid_blocks() {
+        let plot = Rect::new(0, 0, 1, 3);
+        let mut buf = buffer(1, 3);
+
+        // A bar topped at the plot's top edge fills every row from the floor up.
+        draw_bar(&mut buf, plot, &bar(0.0, 1.0, 0.0));
+
+        for y in 0..3 {
+            assert_eq!(buf[(0, y)].symbol(), "█", "row {y}");
+            assert_eq!(buf[(0, y)].fg, BODY);
+        }
+    }
+
+    #[test]
+    fn bar_top_cell_is_lit_from_the_bottom_without_reverse() {
+        let plot = Rect::new(0, 0, 1, 3);
+        let mut buf = buffer(1, 3);
+
+        // A bar topped mid-cell (row 1.5) leaves row 0 empty, a partial top in
+        // row 1, and a solid floor row 2.
+        draw_bar(&mut buf, plot, &bar(0.0, 1.0, 1.5));
+
+        let top = &buf[(0, 1)];
+        assert!(is_partial(top.symbol()), "got {:?}", top.symbol());
+        assert_eq!(top.fg, BODY);
+        // Lit from the bottom of the cell, so no REVERSED inversion is needed.
+        assert!(!top.modifier.contains(Modifier::REVERSED));
+
+        assert_eq!(buf[(0, 2)].symbol(), "█", "solid floor cell");
+        assert_eq!(buf[(0, 0)].symbol(), " ", "empty above the bar");
+    }
+
+    #[test]
+    fn tiny_bar_shows_a_sliver_at_the_bottom() {
+        let plot = Rect::new(0, 0, 1, 3);
+        let mut buf = buffer(1, 3);
+
+        // A bar barely off the floor still shows at least one eighth.
+        draw_bar(&mut buf, plot, &bar(0.0, 1.0, 2.9));
+
+        assert_eq!(buf[(0, 2)].symbol(), "▁");
+        assert_eq!(buf[(0, 1)].symbol(), " ");
+    }
+
+    #[test]
+    fn bar_spans_the_given_columns() {
+        let plot = Rect::new(0, 0, 4, 1);
+        let mut buf = buffer(4, 1);
+
+        // Columns [1, 3) are filled; the ones outside stay empty.
+        draw_bar(&mut buf, plot, &bar(1.0, 3.0, 0.0));
+
+        assert_eq!(buf[(0, 0)].symbol(), " ");
+        assert_eq!(buf[(1, 0)].symbol(), "█");
+        assert_eq!(buf[(2, 0)].symbol(), "█");
+        assert_eq!(buf[(3, 0)].symbol(), " ");
     }
 }

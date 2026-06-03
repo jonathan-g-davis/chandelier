@@ -1,28 +1,30 @@
 //! The coordinate substrate every renderer draws through.
 //!
-//! A [`PriceScale`] maps a price domain onto the rows of a plot area and a
+//! A [`ValueScale`] maps a value domain onto the rows of a plot area and a
 //! [`TimeScale`] maps candle indices onto columns. Both directions of each map
-//! are exposed so a price (or column) can be turned back into the other so that
+//! are exposed so a value (or column) can be turned back into the other so that
 //! a crosshair or inspection readout can be displayed.
 //!
-//! The price map works in continuous fractional rows rather than whole rows or
-//! a fixed sub-cell grid. A renderer asks where a price lands as a fractional
+//! The value map works in continuous fractional rows rather than whole rows or
+//! a fixed sub-cell grid. A renderer asks where a value lands as a fractional
 //! row and quantizes that to whatever vertical resolution its glyphs offer, so
 //! the scale stays independent of the character set used to draw.
 
-/// Maps a price domain `[min, max]` onto a plot `height` (in rows), in both
+/// Maps a value domain `[min, max]` onto a plot `height` (in rows), in both
 /// directions, at continuous (fractional-row) resolution.
 ///
-/// Row `0.0` is the top of the plot and higher prices map to smaller row
+/// Row `0.0` is the top of the plot and higher values map to smaller row
 /// values, matching screen coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PriceScale {
+pub(crate) struct ValueScale {
     min: f64,
     max: f64,
     height: u16,
 }
 
-impl PriceScale {
+pub(crate) type PriceScale = ValueScale;
+
+impl ValueScale {
     /// Builds a scale over `[min, max]` for a plot `height` in rows.
     ///
     /// A zero or inverted span is widened to a small non-zero range so a flat
@@ -40,47 +42,49 @@ impl PriceScale {
         }
     }
 
-    /// Builds a scale from the candles' price bounds, padded by `pad_frac` of
+    /// Builds a scale from the series' value bounds, padded by `pad_frac` of
     /// the span on each end (e.g. `0.05` for 5% headroom top and bottom).
     pub fn autoscale(min: f64, max: f64, height: u16, pad_frac: f64) -> Self {
         let pad = (max - min).abs() * pad_frac;
         Self::new(min - pad, max + pad, height)
     }
 
-    /// Lowest price in the domain.
+    /// Lowest value in the domain.
     pub fn min(&self) -> f64 {
         self.min
     }
 
-    /// Highest price in the domain.
+    /// Highest value in the domain.
     pub fn max(&self) -> f64 {
         self.max
     }
 
     /// Plot height in rows.
+    #[allow(unused)]
     pub fn height(&self) -> u16 {
         self.height
     }
 
-    /// Maps a price to a fractional row measured from the top of the plot,
+    /// Maps a value to a fractional row measured from the top of the plot,
     /// clamped to the plot. Smaller values are higher on screen.
-    pub fn price_to_row_f64(&self, price: f64) -> f64 {
-        let frac = (price - self.min) / (self.max - self.min);
+    pub fn value_to_row_f64(&self, value: f64) -> f64 {
+        let frac = (value - self.min) / (self.max - self.min);
         let from_top = (1.0 - frac) * f64::from(self.height);
         from_top.clamp(0.0, f64::from(self.height))
     }
 
-    /// Inverse of [`price_to_row_f64`](Self::price_to_row_f64): turns a fractional
-    /// row back into a price. Not clamped, so it round-trips prices outside the
+    /// Inverse of [`value_to_row_f64`](Self::value_to_row_f64): turns a fractional
+    /// row back into a value. Not clamped, so it round-trips values outside the
     /// domain as well.
-    pub fn row_f64_to_price(&self, row_f: f64) -> f64 {
+    #[allow(unused)] // This will be used for crosshairs in the future
+    pub fn row_f64_to_value(&self, row_f: f64) -> f64 {
         let frac = 1.0 - row_f / f64::from(self.height);
         self.min + frac * (self.max - self.min)
     }
 
-    /// Maps a price to its whole terminal row within the plot.
-    pub fn price_to_row(&self, price: f64) -> u16 {
-        (self.price_to_row_f64(price) as u16).min(self.height - 1)
+    /// Maps a value to its whole terminal row within the plot.
+    pub fn value_to_row(&self, value: f64) -> u16 {
+        (self.value_to_row_f64(value) as u16).min(self.height - 1)
     }
 }
 
@@ -92,7 +96,7 @@ impl PriceScale {
 /// recent candles that fit are shown, right-aligned, so a growing series scrolls
 /// like a real chart instead of overflowing.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TimeScale {
+pub(crate) struct TimeScale {
     width: u16,
     candle_width: f64,
     gap: f64,
@@ -161,6 +165,7 @@ impl TimeScale {
     /// Inverse of [`index_to_left`](Self::index_to_left): the visible candle a
     /// column falls in, or `None` for a gap or out-of-range column. A column is
     /// matched when its center lands within a candle's fractional body span.
+    #[allow(unused)] // This will be used for crosshairs in the future
     pub fn col_to_index(&self, col: u16) -> Option<usize> {
         if col >= self.width {
             return None;
@@ -185,27 +190,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn price_round_trips_through_row_f() {
-        let scale = PriceScale::new(100.0, 200.0, 20);
-        for price in [100.0, 125.0, 150.0, 199.0] {
-            let row = scale.price_to_row_f64(price);
-            let back = scale.row_f64_to_price(row);
-            assert!((price - back).abs() < 1e-9, "{price} -> {row} -> {back}");
+    fn value_round_trips_through_row_f() {
+        let scale = ValueScale::new(100.0, 200.0, 20);
+        for value in [100.0, 125.0, 150.0, 199.0] {
+            let row = scale.value_to_row_f64(value);
+            let back = scale.row_f64_to_value(row);
+            assert!((value - back).abs() < 1e-9, "{value} -> {row} -> {back}");
         }
     }
 
     #[test]
-    fn higher_prices_map_to_smaller_rows() {
-        let scale = PriceScale::new(0.0, 100.0, 10);
-        assert!(scale.price_to_row_f64(90.0) < scale.price_to_row_f64(10.0));
-        assert_eq!(scale.price_to_row(100.0), 0);
-        assert_eq!(scale.price_to_row(0.0), 9);
+    fn higher_values_map_to_smaller_rows() {
+        let scale = ValueScale::new(0.0, 100.0, 10);
+        assert!(scale.value_to_row_f64(90.0) < scale.value_to_row_f64(10.0));
+        assert_eq!(scale.value_to_row(100.0), 0);
+        assert_eq!(scale.value_to_row(0.0), 9);
     }
 
     #[test]
     fn flat_series_does_not_divide_by_zero() {
-        let scale = PriceScale::new(50.0, 50.0, 10);
-        let row = scale.price_to_row_f64(50.0);
+        let scale = ValueScale::new(50.0, 50.0, 10);
+        let row = scale.value_to_row_f64(50.0);
         assert!(row.is_finite());
     }
 
