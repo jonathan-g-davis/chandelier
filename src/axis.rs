@@ -221,6 +221,24 @@ pub(crate) fn format_price(value: f64, step: f64) -> String {
     format!("{value:.decimals$}")
 }
 
+/// Formats a volume for an axis label with a magnitude suffix ('K', 'M', 'B').
+#[allow(dead_code)]
+pub(crate) fn format_volume(value: f64, _step: f64) -> String {
+    let abs = value.abs();
+    let (scaled, suffix) = if abs >= 1e9 {
+        (value / 1e9, "B")
+    } else if abs >= 1e6 {
+        (value / 1e6, "M")
+    } else if abs >= 1e3 {
+        (value / 1e3, "K")
+    } else {
+        return format!("{value:.0}");
+    };
+
+    let decimals = if scaled.abs() >= 100.0 { 0 } else { 1 };
+    format!("{scaled:.decimals$}{suffix}")
+}
+
 /// Draws the right-hand value axis.
 ///
 /// Ticks are round-number ticks across the scale. Labels are formatted by the
@@ -315,6 +333,17 @@ mod tests {
         assert_eq!(format_price(123.456, 0.5), "123.5");
         assert_eq!(format_price(1.2345, 0.05), "1.23");
         assert_eq!(format_price(1.2345, 0.005), "1.234");
+    }
+
+    #[test]
+    fn format_volume_scales_to_compact_suffixes() {
+        assert_eq!(format_volume(0.0, 0.0), "0");
+        assert_eq!(format_volume(500.0, 0.0), "500");
+        assert_eq!(format_volume(1_500.0, 0.0), "1.5K");
+        assert_eq!(format_volume(950_000.0, 0.0), "950K");
+        assert_eq!(format_volume(1_200_000.0, 0.0), "1.2M");
+        assert_eq!(format_volume(12_500_000.0, 0.0), "12.5M");
+        assert_eq!(format_volume(1_000_000_000.0, 0.0), "1.0B");
     }
 
     #[test]
