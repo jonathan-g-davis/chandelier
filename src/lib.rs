@@ -44,4 +44,4 @@ pub use axis::{PriceAxis, TimeAxis, ValueAxis};
 pub use chart::CandlestickChart;
 pub use marker::Marker;
 pub use render::BodyFill;
-pub use series::{Candle, CandleSeries, price_bounds};
+pub use series::{Candle, CandleSeries, Direction, VolumeSeries, price_bounds};

@@ -1,14 +1,14 @@
-//! Price data the chart renders.
+//! Data the charts render.
 //!
 //! Input is plain values. Chandelier does not fetch, compute, or persist
-//! anything. Callers pass already-computed OHLC data.
+//! anything. Callers pass already-computed OHLC and volume data.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Style};
+use ratatui_core::style::{Color, Style, Styled};
 
 use crate::marker::Marker;
-use crate::render::{BodyFill, CandleGeometry, PlotLayout, Series};
+use crate::render::{BarGeometry, BodyFill, CandleGeometry, PlotLayout, Series, draw_bar};
 use crate::scale::TimeScale;
 
 /// A single open/high/low/close bar.
@@ -44,6 +44,17 @@ impl Candle {
         self.close >= self.open
     }
 
+    /// Whether the bar closed up, down, or unchanged from its open.
+    pub fn direction(&self) -> Direction {
+        if self.close > self.open {
+            Direction::Up
+        } else if self.close < self.open {
+            Direction::Down
+        } else {
+            Direction::Flat
+        }
+    }
+
     /// The higher of open/close, the top edge of the body.
     pub fn body_top(&self) -> f64 {
         self.open.max(self.close)
@@ -53,6 +64,50 @@ impl Candle {
     pub fn body_bottom(&self) -> f64 {
         self.open.min(self.close)
     }
+}
+
+/// A single volume measurement.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Volume {
+    pub quantity: f64,
+    pub direction: Direction,
+}
+
+impl Volume {
+    /// Creates a new volume measurement.
+    pub fn new(quantity: f64) -> Self {
+        Self {
+            quantity,
+            direction: Direction::Flat,
+        }
+    }
+
+    /// Sets the direction of the volume measurement.
+    pub fn with_direction(mut self, direction: Direction) -> Self {
+        self.direction = direction;
+        self
+    }
+}
+
+impl From<f64> for Volume {
+    fn from(quantity: f64) -> Self {
+        Self {
+            quantity,
+            direction: Direction::Flat,
+        }
+    }
+}
+
+/// Which way a period closed: up, down, or unchanged.
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum Direction {
+    /// Closed above the open.
+    Up,
+    /// Closed below the open.
+    Down,
+    /// Closed level with the open.
+    #[default]
+    Flat,
 }
 
 /// The lowest low and highest high across a set of candles.
@@ -250,6 +305,124 @@ impl Series for CandleSeries<'_> {
     }
 }
 
+/// A series of trading volumes together with how it is drawn.
+#[derive(Debug, Clone)]
+pub struct VolumeSeries<'a> {
+    pub(crate) volumes: &'a [Volume],
+    bar: Style,
+    bull: Style,
+    bear: Style,
+    pub(crate) width: f64,
+    pub(crate) gap: f64,
+}
+
+impl<'a> VolumeSeries<'a> {
+    /// Creates a series over `volumes` drawn as single-color gray bars three
+    /// columns wide with a one-column gap.
+    pub fn new(volumes: &'a [Volume]) -> Self {
+        Self {
+            volumes,
+            bar: Style::new().fg(Color::Gray),
+            bull: Style::new().fg(Color::Green),
+            bear: Style::new().fg(Color::Red),
+            width: 3.0,
+            gap: 1.0,
+        }
+    }
+
+    /// Sets the color of bars whose direction is up. Its foreground is the bar
+    /// color.
+    #[must_use]
+    pub fn bull_style(mut self, style: impl Into<Style>) -> Self {
+        self.bull = style.into();
+        self
+    }
+
+    /// Sets the color of bars whose direction is down. Its foreground is the bar
+    /// color.
+    #[must_use]
+    pub fn bear_style(mut self, style: impl Into<Style>) -> Self {
+        self.bear = style.into();
+        self
+    }
+
+    /// Sets the bar width in columns. May be fractional.
+    #[must_use]
+    pub fn width(mut self, cols: f64) -> Self {
+        self.width = cols;
+        self
+    }
+
+    /// Sets the gap, in columns, between adjacent bars. May be fractional.
+    #[must_use]
+    pub fn gap(mut self, gap: f64) -> Self {
+        self.gap = gap;
+        self
+    }
+
+    pub(crate) fn bar_color(&self, bar: Volume) -> Color {
+        let style = match bar.direction {
+            Direction::Up => self.bull,
+            Direction::Down => self.bear,
+            Direction::Flat => self.bar,
+        };
+        style.fg.unwrap_or(Color::Reset)
+    }
+}
+
+impl<'a> Styled for VolumeSeries<'a> {
+    type Item = VolumeSeries<'a>;
+
+    /// The single bar style, used for bars without an
+    /// [`Up`](Direction::Up) or [`Down`](Direction::Down) direction.
+    fn style(&self) -> Style {
+        self.bar
+    }
+
+    fn set_style<S: Into<Style>>(mut self, style: S) -> Self::Item {
+        self.bar = style.into();
+        self
+    }
+}
+
+impl Series for VolumeSeries<'_> {
+    fn value_bounds(&self) -> Option<(f64, f64)> {
+        let hi = self.volumes.iter().map(|v| v.quantity).reduce(f64::max)?;
+
+        Some((0.0, hi))
+    }
+
+    fn time_scale(&self, plot: Rect) -> TimeScale {
+        TimeScale::new(plot.width, self.volumes.len(), self.width, self.gap)
+    }
+
+    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
+        let plot = layout.plot;
+        let scale = layout.price;
+        let time = layout.time;
+        let bg = layout.bg;
+
+        for vi in 0..time.visible() {
+            let oi = time.first_visible() + vi;
+            let volume = self.volumes[oi];
+            // A zero or negative bar has nothing to draw.
+            if volume.quantity <= 0.0 {
+                continue;
+            }
+
+            let left = time.index_to_left(vi);
+            let geometry = BarGeometry {
+                left,
+                right: left + time.candle_width(),
+                value_row: scale.value_to_row_f64(volume.quantity),
+                color: self.bar_color(volume),
+                bg,
+            };
+            draw_bar(buf, plot, &geometry);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,6 +432,22 @@ mod tests {
         assert!(Candle::new(100.0, 105.0, 99.0, 104.0).is_bullish());
         assert!(Candle::new(100.0, 105.0, 99.0, 100.0).is_bullish());
         assert!(!Candle::new(100.0, 105.0, 95.0, 96.0).is_bullish());
+    }
+
+    #[test]
+    fn direction_distinguishes_up_down_and_flat() {
+        assert_eq!(
+            Candle::new(100.0, 105.0, 99.0, 104.0).direction(),
+            Direction::Up
+        );
+        assert_eq!(
+            Candle::new(104.0, 105.0, 95.0, 96.0).direction(),
+            Direction::Down
+        );
+        assert_eq!(
+            Candle::new(100.0, 105.0, 99.0, 100.0).direction(),
+            Direction::Flat
+        );
     }
 
     #[test]
@@ -326,5 +515,57 @@ mod tests {
 
         let series = series.wick_style(Color::Gray);
         assert_eq!(series.wick_color(candles[0]), Color::Gray);
+    }
+
+    #[test]
+    fn volume_bar_color_defaults_to_a_single_color() {
+        let volumes = [Volume::new(10.0)];
+        let series = VolumeSeries::new(&volumes);
+        assert_eq!(series.bar_color(Volume::new(10.0)), Color::Gray);
+
+        let series = VolumeSeries::new(&volumes).set_style(Color::Blue);
+        assert_eq!(series.bar_color(Volume::new(20.0)), Color::Blue);
+    }
+
+    #[test]
+    fn volume_bar_color_follows_direction() {
+        let volumes = [Volume::new(10.0)];
+        let series = VolumeSeries::new(&volumes)
+            .bull_style(Color::Green)
+            .bear_style(Color::Red)
+            .set_style(Color::Blue);
+
+        let up = Volume::new(10.0).with_direction(Direction::Up);
+        let down = Volume::new(10.0).with_direction(Direction::Down);
+        let flat = Volume::new(10.0).with_direction(Direction::Flat);
+        assert_eq!(series.bar_color(up), Color::Green);
+        assert_eq!(series.bar_color(down), Color::Red);
+        assert_eq!(series.bar_color(flat), Color::Blue);
+    }
+
+    #[test]
+    fn volume_without_a_direction_uses_the_single_color() {
+        let volumes = [Volume::new(10.0)];
+        let series = VolumeSeries::new(&volumes)
+            .bull_style(Color::Green)
+            .set_style(Color::Blue);
+        assert_eq!(series.bar_color(Volume::new(30.0)), Color::Blue);
+        assert_eq!(series.bar_color(Volume::from(30.0)), Color::Blue);
+    }
+
+    #[test]
+    fn volume_value_bounds_anchors_at_zero() {
+        let volumes = [Volume::new(10.0), Volume::new(45.0), Volume::new(30.0)];
+        assert_eq!(
+            VolumeSeries::new(&volumes).value_bounds(),
+            Some((0.0, 45.0))
+        );
+    }
+
+    #[test]
+    fn volume_value_bounds_is_none_only_when_empty() {
+        assert_eq!(VolumeSeries::new(&[]).value_bounds(), None);
+        let zeros = [Volume::new(0.0), Volume::new(0.0)];
+        assert_eq!(VolumeSeries::new(&zeros).value_bounds(), Some((0.0, 0.0)));
     }
 }
