@@ -1,25 +1,33 @@
 //! The chart's two axes and the tick selection behind them.
 //!
-//! [`PriceAxis`] and [`TimeAxis`] are small style-and-layout configurations the
-//! chart composes; the tick helpers pick where price labels go and how they read.
+//! [`ValueAxis`] and [`TimeAxis`] are small style-and-layout configurations the
+//! chart composes. The tick helpers pick where value labels go and how they read.
 
-use ratatui_core::layout::Alignment;
+use ratatui_core::buffer::Buffer;
+use ratatui_core::layout::{Alignment, Rect};
 use ratatui_core::style::{Color, Style, Styled};
 
-/// Configuration for the price (vertical) axis.
+use crate::scale::{TimeScale, ValueScale};
+
+/// Configuration for a vertical value axis, such as a chart's price or volume
+/// axis.
 ///
 /// Carries how the labels are styled, how many columns the axis reserves on the
 /// right, and how the labels sit within those columns. The value range and tick
-/// positions are chosen automatically from the data in view.
+/// positions are chosen automatically from the data in view, and how each value
+/// reads as a label is chosen by the chart that draws the axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PriceAxis {
+pub struct ValueAxis {
     pub(crate) style: Style,
     pub(crate) width: u16,
     pub(crate) labels_alignment: Alignment,
 }
 
-impl PriceAxis {
-    /// A price axis with gray, right-aligned labels reserving eight columns.
+/// The vertical axis of a [`CandlestickChart`](crate::CandlestickChart).
+pub type PriceAxis = ValueAxis;
+
+impl ValueAxis {
+    /// A value axis with gray, right-aligned labels reserving eight columns.
     pub fn new() -> Self {
         Self {
             style: Style::new().fg(Color::Gray),
@@ -50,14 +58,14 @@ impl PriceAxis {
     }
 }
 
-impl Default for PriceAxis {
+impl Default for ValueAxis {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Styled for PriceAxis {
-    type Item = PriceAxis;
+impl Styled for ValueAxis {
+    type Item = ValueAxis;
 
     fn style(&self) -> Style {
         self.style
@@ -211,6 +219,71 @@ pub(crate) fn format_price(value: f64, step: f64) -> String {
     };
 
     format!("{value:.decimals$}")
+}
+
+/// Draws the right-hand value axis.
+///
+/// Ticks are round-number ticks across the scale. Labels are formatted by the
+/// provided function and aligned within the axis columns.
+pub(crate) fn draw_value_axis(
+    buf: &mut Buffer,
+    plot: Rect,
+    scale: &ValueScale,
+    axis: &ValueAxis,
+    format: &dyn Fn(f64, f64) -> String,
+) {
+    let ticks = price_ticks(scale.min(), scale.max(), 6);
+    let step = if ticks.len() >= 2 {
+        ticks[1] - ticks[0]
+    } else {
+        1.0
+    };
+    let axis_x = plot.x + plot.width;
+    let width = axis.width as usize;
+
+    for &t in ticks.iter() {
+        if t < scale.min() || t > scale.max() {
+            continue;
+        }
+
+        let row = scale.value_to_row(t);
+        let label = format(t, step);
+        let padded = match axis.labels_alignment {
+            Alignment::Left => format!("{label:<width$}"),
+            Alignment::Center => format!("{label:^width$}"),
+            Alignment::Right => format!("{label:>width$}"),
+        };
+        buf.set_string(axis_x, plot.y + row, padded, axis.style);
+    }
+}
+
+/// Draws the bottom time axis.
+///
+/// Labels are aligned relative to a candle's center column. Labels that would
+/// overlap a previous one are skipped to avoid collisions.
+pub(crate) fn draw_time_axis(buf: &mut Buffer, plot: Rect, time: &TimeScale, axis: &TimeAxis<'_>) {
+    let y = plot.y + plot.height;
+    let mut next_free: u16 = plot.x;
+
+    for vi in 0..time.visible() {
+        let orig = time.first_visible() + vi;
+        let label = match axis.labels {
+            Some(labels) if orig < labels.len() => labels[orig].clone(),
+            _ => orig.to_string(),
+        };
+        let cx = plot.x + time.index_to_center_col(vi);
+        let len = label.chars().count() as u16;
+        let start = match axis.labels_alignment {
+            Alignment::Left => cx,
+            Alignment::Center => cx.saturating_sub(len / 2),
+            Alignment::Right => cx.saturating_sub(len.saturating_sub(1)),
+        };
+
+        if start >= next_free && start + len <= plot.x + plot.width {
+            buf.set_string(start, y, &label, axis.style);
+            next_free = start + len + 2;
+        }
+    }
 }
 
 #[cfg(test)]

@@ -40,7 +40,7 @@ mod render;
 mod scale;
 mod series;
 
-pub use axis::{PriceAxis, TimeAxis};
+pub use axis::{PriceAxis, TimeAxis, ValueAxis};
 pub use chart::CandlestickChart;
 pub use marker::Marker;
 pub use render::{BodyFill, PlotLayout};

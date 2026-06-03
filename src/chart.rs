@@ -1,14 +1,14 @@
 //! The candlestick chart widget.
 
 use ratatui_core::buffer::Buffer;
-use ratatui_core::layout::{Alignment, Rect};
+use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Style, Styled};
 use ratatui_core::widgets::Widget;
 use ratatui_widgets::block::{Block, BlockExt};
 
 use crate::axis::{self, PriceAxis, TimeAxis};
 use crate::render::{PlotLayout, Series};
-use crate::scale::{PriceScale, TimeScale};
+use crate::scale::PriceScale;
 use crate::series::CandleSeries;
 
 /// A candlestick chart: a [`CandleSeries`] drawn with a [`PriceAxis`] and a
@@ -99,8 +99,14 @@ impl<'a> CandlestickChart<'a> {
         self.draw_overlays(buf, &layout);
 
         if self.show_axes {
-            self.draw_price_axis(buf, &layout.price, layout.plot);
-            self.draw_time_axis(buf, &layout.time, layout.plot);
+            axis::draw_value_axis(
+                buf,
+                layout.plot,
+                &layout.price,
+                &self.price_axis,
+                &|v, step| axis::format_price(v, step),
+            );
+            axis::draw_time_axis(buf, layout.plot, &layout.time, &self.time_axis);
         }
     }
 
@@ -143,57 +149,6 @@ impl<'a> CandlestickChart<'a> {
     /// Draws anything layered on top of the series, after it and before the
     /// axes. Overlays align to `layout`'s scales. There are none by default.
     fn draw_overlays(&self, _buf: &mut Buffer, _layout: &PlotLayout) {}
-
-    fn draw_price_axis(&self, buf: &mut Buffer, scale: &PriceScale, plot: Rect) {
-        let ticks = axis::price_ticks(scale.min(), scale.max(), 6);
-        let step = if ticks.len() >= 2 {
-            ticks[1] - ticks[0]
-        } else {
-            1.0
-        };
-        let axis_x = plot.x + plot.width;
-        let width = self.price_axis.width as usize;
-
-        for &t in ticks.iter() {
-            if t < scale.min() || t > scale.max() {
-                continue;
-            }
-
-            let row = scale.price_to_row(t);
-            let label = axis::format_price(t, step);
-            let padded = match self.price_axis.labels_alignment {
-                Alignment::Left => format!("{label:<width$}"),
-                Alignment::Center => format!("{label:^width$}"),
-                Alignment::Right => format!("{label:>width$}"),
-            };
-            buf.set_string(axis_x, plot.y + row, padded, self.price_axis.style);
-        }
-    }
-
-    fn draw_time_axis(&self, buf: &mut Buffer, time: &TimeScale, plot: Rect) {
-        let y = plot.y + plot.height;
-        let mut next_free: u16 = plot.x;
-
-        for vi in 0..time.visible() {
-            let orig = time.first_visible() + vi;
-            let label = match self.time_axis.labels {
-                Some(labels) if orig < labels.len() => labels[orig].clone(),
-                _ => orig.to_string(),
-            };
-            let cx = plot.x + time.index_to_center_col(vi);
-            let len = label.chars().count() as u16;
-            let start = match self.time_axis.labels_alignment {
-                Alignment::Left => cx,
-                Alignment::Center => cx.saturating_sub(len / 2),
-                Alignment::Right => cx.saturating_sub(len.saturating_sub(1)),
-            };
-
-            if start >= next_free && start + len <= plot.x + plot.width {
-                buf.set_string(start, y, &label, self.time_axis.style);
-                next_free = start + len + 2;
-            }
-        }
-    }
 }
 
 impl Widget for &CandlestickChart<'_> {
