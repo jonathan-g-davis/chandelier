@@ -222,7 +222,6 @@ pub(crate) fn format_price(value: f64, step: f64) -> String {
 }
 
 /// Formats a volume for an axis label with a magnitude suffix ('K', 'M', 'B').
-#[allow(dead_code)]
 pub(crate) fn format_volume(value: f64, _step: f64) -> String {
     let abs = value.abs();
     let (scaled, suffix) = if abs >= 1e9 {

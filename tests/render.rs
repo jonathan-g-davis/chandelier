@@ -1,10 +1,13 @@
 //! Renders charts into an in-memory buffer and asserts what lands on the grid.
 //! This verifies the renderer without an interactive terminal.
 
-use chandelier::{BodyFill, Candle, CandleSeries, CandlestickChart, Marker, PriceAxis, TimeAxis};
+use chandelier::{
+    BodyFill, Candle, CandleSeries, CandlestickChart, Direction, Marker, PriceAxis, TimeAxis,
+    Volume, VolumeChart, VolumeSeries,
+};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Modifier, Style};
+use ratatui_core::style::{Color, Modifier, Style, Styled};
 use ratatui_core::widgets::Widget;
 
 /// Collects the foreground colors actually used across the buffer.
@@ -429,6 +432,117 @@ fn fill_style_is_applied_per_direction() {
         body_cells(&filled, bear),
         "the filled bear body should be unchanged"
     );
+}
+
+fn render_volume(chart: &VolumeChart, w: u16, h: u16) -> Buffer {
+    let area = Rect::new(0, 0, w, h);
+    let mut buf = Buffer::empty(area);
+    chart.render(area, &mut buf);
+    buf
+}
+
+#[test]
+fn empty_volume_series_renders_nothing() {
+    let chart = VolumeChart::new(VolumeSeries::new(&[]));
+    let buf = render_volume(&chart, 20, 10);
+    assert!(buf.content().iter().all(|c| c.symbol() == " "));
+}
+
+#[test]
+fn volume_bars_are_bottom_anchored() {
+    // A short bar beside a tall one fills only the rows nearest the baseline; the
+    // cells above it stay blank, and both bars sit on the floor.
+    let volumes = [Volume::new(100.0), Volume::new(25.0)];
+    let series = VolumeSeries::new(&volumes).width(1.0).gap(1.0);
+    let buf = render_volume(&VolumeChart::new(series).axes(false), 3, 8);
+
+    let grid = glyph_grid(&buf);
+    // Column 0 is the tall bar, column 1 the gap, column 2 the short bar.
+    assert_ne!(
+        buf[(0, 7)].symbol(),
+        " ",
+        "tall bar fills the floor: {grid:?}"
+    );
+    assert_ne!(
+        buf[(2, 7)].symbol(),
+        " ",
+        "short bar fills the floor: {grid:?}"
+    );
+    assert_eq!(
+        buf[(2, 0)].symbol(),
+        " ",
+        "short bar empty at the top: {grid:?}"
+    );
+
+    let filled = |x: u16| (0..8).filter(|&y| buf[(x, y)].symbol() != " ").count();
+    assert!(
+        filled(0) > filled(2),
+        "the taller volume fills more rows: {grid:?}"
+    );
+}
+
+#[test]
+fn volume_up_and_down_bars_use_distinct_colors() {
+    let volumes = [
+        Volume::new(100.0).with_direction(Direction::Up),
+        Volume::new(80.0).with_direction(Direction::Down),
+    ];
+    let series = VolumeSeries::new(&volumes)
+        .width(1.0)
+        .gap(1.0)
+        .bull_style(Color::Green)
+        .bear_style(Color::Red);
+    let chart = VolumeChart::new(series)
+        .style(Style::new().bg(Color::Black))
+        .axes(false);
+    let buf = render_volume(&chart, 3, 8);
+
+    let fg = foreground_colors(&buf);
+    assert!(fg.contains(&Color::Green), "expected an up (green) bar");
+    assert!(fg.contains(&Color::Red), "expected a down (red) bar");
+}
+
+#[test]
+fn volume_bars_share_a_single_color_without_direction() {
+    let volumes = [Volume::new(100.0), Volume::new(60.0), Volume::new(80.0)];
+    let series = VolumeSeries::new(&volumes)
+        .width(1.0)
+        .gap(1.0)
+        .set_style(Color::Blue);
+    let buf = render_volume(&VolumeChart::new(series).axes(false), 6, 8);
+
+    assert_eq!(
+        foreground_colors(&buf),
+        vec![Color::Blue],
+        "directionless bars all use the single bar color"
+    );
+}
+
+#[test]
+fn volume_renders_within_bounds_for_many_bars() {
+    // A series far larger than the area must not panic and must clip cleanly.
+    let volumes: Vec<Volume> = (0..500)
+        .map(|i| Volume::new((i % 50) as f64 + 1.0))
+        .collect();
+    let chart = VolumeChart::new(VolumeSeries::new(&volumes).width(1.0).gap(0.0));
+    let _ = render_volume(&chart, 24, 12); // must not panic
+}
+
+#[test]
+fn volume_bar_grid_is_stable() {
+    // Small test chart to prevent rendering regression.
+    let volumes = [Volume::new(100.0), Volume::new(50.0), Volume::new(75.0)];
+    let chart = VolumeChart::new(VolumeSeries::new(&volumes).width(3.0).gap(1.0)).axes(false);
+    let buf = render_volume(&chart, 12, 4);
+
+    let expected = [
+        "▆▆▆         ",
+        "███     ▇▇▇ ",
+        "███ ▇▇▇ ███ ",
+        "███ ███ ███ ",
+    ];
+
+    assert_eq!(glyph_grid(&buf), expected);
 }
 
 /// The truecolor SGR prefix for a cell's foreground and background, so the dump
