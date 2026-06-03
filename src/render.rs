@@ -16,6 +16,7 @@ mod quadrant;
 mod wick;
 
 pub(crate) use block::Block;
+pub(crate) use block::draw_bar;
 pub(crate) use box_drawing::BoxDrawing;
 pub(crate) use braille::Braille;
 pub(crate) use quadrant::Quadrant;
@@ -93,6 +94,20 @@ impl CandleGeometry {
     pub(crate) fn center(&self) -> f64 {
         (self.body_left + self.body_right) / 2.0
     }
+}
+
+/// One bar's geometry and colors.
+pub(crate) struct BarGeometry {
+    /// The fractional column of the left edge of the bar.
+    pub left: f64,
+    /// The fractional column of the right edge of the bar.
+    pub right: f64,
+    /// The fractional row of the top of the bar.
+    pub value_row: f64,
+    /// The color of the bar.
+    pub color: Color,
+    /// The color the empty portion of a partially filled cell is painted.
+    pub bg: Color,
 }
 
 /// Quantizes a body edge span `[start, end)` (in fractional rows or columns) to
