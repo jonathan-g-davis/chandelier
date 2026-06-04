@@ -25,7 +25,7 @@ pub struct ValueAxis<'a> {
     pub(crate) style: Style,
     pub(crate) width: u16,
     pub(crate) labels_alignment: Alignment,
-    pub(crate) bounds: Option<(f64, f64)>,
+    pub(crate) bounds: Option<[f64; 2]>,
     pub(crate) ticks: Option<&'a [f64]>,
     pub(crate) tick_count: usize,
 }
@@ -74,8 +74,8 @@ impl<'a> ValueAxis<'a> {
     /// Padding and overlays no longer expand the range, and the chart renders
     /// the fixed range even when it has no data to draw.
     #[must_use]
-    pub fn bounds(mut self, min: f64, max: f64) -> Self {
-        self.bounds = Some((min, max));
+    pub fn bounds(mut self, bounds: [f64; 2]) -> Self {
+        self.bounds = Some(bounds);
         self
     }
 
@@ -422,8 +422,8 @@ mod tests {
         assert_eq!(axis.tick_count, 6);
 
         let ticks = [0.0, 50.0, 100.0];
-        let axis = axis.bounds(0.0, 100.0).ticks(&ticks).tick_count(10);
-        assert_eq!(axis.bounds, Some((0.0, 100.0)));
+        let axis = axis.bounds([0.0, 100.0]).ticks(&ticks).tick_count(10);
+        assert_eq!(axis.bounds, Some([0.0, 100.0]));
         assert_eq!(axis.ticks, Some(&ticks[..]));
         assert_eq!(axis.tick_count, 10);
     }

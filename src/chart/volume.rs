@@ -185,7 +185,7 @@ impl<'a> VolumeChart<'a> {
         };
 
         let value = match self.value_axis.bounds {
-            Some((min, max)) => ValueScale::new(min, max, plot.height),
+            Some([min, max]) => ValueScale::new(min, max, plot.height),
             None => {
                 let (_, hi) = self.series.value_bounds()?;
                 // Overlays may raise the top, but the baseline stays at zero.

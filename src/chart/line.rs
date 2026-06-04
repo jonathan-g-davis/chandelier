@@ -228,7 +228,7 @@ impl<'a> LineChart<'a> {
         };
 
         let value = match self.value_axis.bounds {
-            Some((min, max)) => ValueScale::new(min, max, plot.height),
+            Some([min, max]) => ValueScale::new(min, max, plot.height),
             None => {
                 let (lo, hi) = self
                     .series
@@ -320,7 +320,7 @@ mod tests {
     fn fixed_bounds_override_autoscale_and_padding() {
         let values = [Some(10.0), Some(20.0)];
         let chart = LineChart::new(LineSeries::new(&values))
-            .value_axis(ValueAxis::new().bounds(0.0, 200.0));
+            .value_axis(ValueAxis::new().bounds([0.0, 200.0]));
         let layout = layout_of(&chart, Rect::new(0, 0, 40, 20)).expect("a plot fits");
         // The pinned range is used verbatim, with no autoscale or padding.
         assert_eq!(layout.value.min(), 0.0);
@@ -330,8 +330,8 @@ mod tests {
     #[test]
     fn fixed_bounds_render_even_without_data() {
         let empty: [Option<f64>; 0] = [];
-        let chart =
-            LineChart::new(LineSeries::new(&empty)).value_axis(ValueAxis::new().bounds(0.0, 100.0));
+        let chart = LineChart::new(LineSeries::new(&empty))
+            .value_axis(ValueAxis::new().bounds([0.0, 100.0]));
         let layout = layout_of(&chart, Rect::new(0, 0, 40, 20)).expect("fixed bounds still render");
         assert_eq!(layout.value.min(), 0.0);
         assert_eq!(layout.value.max(), 100.0);

@@ -177,7 +177,7 @@ impl<'a> CandlestickChart<'a> {
         };
 
         let value = match self.price_axis.bounds {
-            Some((min, max)) => PriceScale::new(min, max, plot.height),
+            Some([min, max]) => PriceScale::new(min, max, plot.height),
             None => {
                 let (lo, hi) = self.series.value_bounds()?;
                 let (lo, hi) = overlay::union_bounds((lo, hi), &self.underlays);
