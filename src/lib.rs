@@ -27,6 +27,9 @@
 //!
 //! - A candlestick chart that autoscales to the data in view.
 //! - A volume chart that autoscales to the data in view.
+//! - A line chart that plots one or more indicator series, such as RSI or the
+//!   lines of a MACD, on a shared autoscaling value axis, with reference levels
+//!   drawn as [`TrendLine`] overlays.
 //! - Sub-cell body endpoints: open and close levels are placed to the nearest
 //!   eighth of a row with partial block characters instead of snapping to whole
 //!   rows. These render correctly over any background, including the terminal
@@ -43,10 +46,10 @@ mod scale;
 mod series;
 
 pub use axis::{PriceAxis, TimeAxis, ValueAxis};
-pub use chart::{CandlestickChart, VolumeChart};
+pub use chart::{CandlestickChart, LineChart, VolumeChart};
 pub use marker::Marker;
 pub use overlay::{
     Anchor, Annotation, Annotations, Label, LineOverlay, LineStyle, Overlay, TrendLine,
 };
 pub use render::BodyFill;
-pub use series::{Candle, CandleSeries, Direction, Volume, VolumeSeries, price_bounds};
+pub use series::{Candle, CandleSeries, Direction, LineSeries, Volume, VolumeSeries, price_bounds};

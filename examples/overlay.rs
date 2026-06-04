@@ -21,6 +21,8 @@ use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::layout::Alignment;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
+use ta::Next;
+use ta::indicators::SimpleMovingAverage;
 
 fn main() -> std::io::Result<()> {
     let candles = sample_candles();
@@ -65,8 +67,7 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         Annotation::sell(n - 5, candles[n - 5].high),
     ];
 
-    // A 10-period simple moving average of the closes, undefined until enough
-    // candles have accumulated.
+    // A 10-period simple moving average of the closes, tracking the candles.
     let moving_average = sma(candles, 10);
 
     let candle_series = CandleSeries::new(candles)
@@ -136,15 +137,12 @@ fn sample_candles() -> Vec<Candle> {
 }
 
 /// A simple moving average of the candle closes over `period` candles, aligned
-/// one-to-one with the candles. The first `period - 1` entries are `None`.
+/// one-to-one with the candles, computed with the [`ta`] crate.
 fn sma(candles: &[Candle], period: usize) -> Vec<Option<f64>> {
-    (0..candles.len())
-        .map(|i| {
-            (i + 1 >= period).then(|| {
-                let window = &candles[i + 1 - period..=i];
-                window.iter().map(|c| c.close).sum::<f64>() / period as f64
-            })
-        })
+    let mut sma = SimpleMovingAverage::new(period).expect("period is non-zero");
+    candles
+        .iter()
+        .map(|candle| Some(sma.next(candle.close)))
         .collect()
 }
 
