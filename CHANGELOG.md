@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/jonathan-g-davis/chandelier/compare/v0.3.2...v0.4.0) - 2026-06-04
+
+### Added
+
+- Dedicated line charts for plotting continuous indicators like RSI or MACD ([#21](https://github.com/jonathan-g-davis/chandelier/pull/21))
+- Methods to define axis ticks and bounds, useful for indicators like RSI with fixed ranges ([#23](https://github.com/jonathan-g-davis/chandelier/pull/23))
+
 ## [0.3.2](https://github.com/jonathan-g-davis/chandelier/compare/v0.3.1...v0.3.2) - 2026-06-04
 
 ### Added
