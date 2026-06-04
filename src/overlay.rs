@@ -7,7 +7,7 @@
 
 mod value_line;
 
-pub use value_line::{LabelSide, LineStyle, ValueLine};
+pub use value_line::{LineStyle, ValueLine};
 
 use ratatui_core::buffer::Buffer;
 

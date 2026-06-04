@@ -2,12 +2,11 @@
 //! on the grid.
 
 use chandelier::{
-    Candle, CandleSeries, CandlestickChart, LabelSide, LineStyle, ValueLine, Volume, VolumeChart,
-    VolumeSeries,
+    Candle, CandleSeries, CandlestickChart, LineStyle, ValueLine, Volume, VolumeChart, VolumeSeries,
 };
 use ratatui_core::buffer::Buffer;
-use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Style};
+use ratatui_core::layout::{Alignment, Rect};
+use ratatui_core::style::{Color, Modifier, Style};
 use ratatui_core::widgets::Widget;
 
 fn render(chart: &CandlestickChart, w: u16, h: u16) -> Buffer {
@@ -95,7 +94,7 @@ fn dashed_and_solid_use_distinct_glyphs() {
 }
 
 #[test]
-fn label_near_axis_is_right_aligned() {
+fn label_is_right_aligned_by_default() {
     let candles = candles();
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
@@ -108,20 +107,101 @@ fn label_near_axis_is_right_aligned() {
 }
 
 #[test]
-fn label_inline_is_left_aligned() {
+fn label_left_alignment_starts_at_the_left_edge() {
     let candles = candles();
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .overlay(
             ValueLine::at(104.0)
                 .label("LAST")
-                .label_side(LabelSide::Inline),
+                .label_alignment(Alignment::Left),
         );
     let buf = render(&chart, 24, 12);
 
     let y = row_with_symbol(&buf, "─").unwrap();
     let text = row_text(&buf, y);
     assert!(text.starts_with("LAST"), "label not left-aligned: {text:?}");
+}
+
+#[test]
+fn centered_label_breaks_the_line_with_padding() {
+    let candles = candles();
+    let chart = CandlestickChart::new(CandleSeries::new(&candles))
+        .axes(false)
+        .overlay(
+            ValueLine::at(104.0)
+                .label("LAST")
+                .label_alignment(Alignment::Center)
+                .label_padding(2),
+        );
+    let buf = render(&chart, 24, 12);
+
+    let y = row_with_symbol(&buf, "─").unwrap();
+    let text = row_text(&buf, y);
+    // The line reaches both edges, with a padded gap around the centered label.
+    assert!(
+        text.starts_with("─"),
+        "line should reach the left edge: {text:?}"
+    );
+    assert!(
+        text.ends_with("─"),
+        "line should reach the right edge: {text:?}"
+    );
+    assert!(
+        text.contains("  LAST  "),
+        "label not padded by blanks: {text:?}"
+    );
+}
+
+#[test]
+fn label_inset_leads_in_with_line_before_the_label() {
+    let candles = candles();
+    let chart = CandlestickChart::new(CandleSeries::new(&candles))
+        .axes(false)
+        .overlay(
+            ValueLine::at(104.0)
+                .label("RES")
+                .label_alignment(Alignment::Left)
+                .label_inset(2)
+                .label_padding(0),
+        );
+    let buf = render(&chart, 24, 12);
+
+    let y = row_with_symbol(&buf, "─").unwrap();
+    let text = row_text(&buf, y);
+    // Two leading line columns, then the label, then the line continues.
+    assert!(
+        text.starts_with("──RES─"),
+        "expected an inset label: {text:?}"
+    );
+}
+
+#[test]
+fn line_and_label_paint_on_the_chart_background() {
+    // The line and its label sit on the chart background, never inheriting a
+    // candle cell's REVERSED inversion (which would swap the colors).
+    let base = Color::Rgb(13, 17, 23);
+    let candles = candles();
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .style(Style::new().bg(base))
+        .overlay(
+            ValueLine::at(104.0)
+                .style(Color::White)
+                .label("LAST")
+                .label_alignment(Alignment::Center),
+        );
+    let buf = render(&chart, 24, 12);
+
+    let y = row_with_symbol(&buf, "─").unwrap();
+    for x in 0..24 {
+        let cell = &buf[(x, y)];
+        assert_eq!(cell.bg, base, "cell {x} should sit on the chart background");
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "cell {x} should not be reversed"
+        );
+    }
 }
 
 #[test]

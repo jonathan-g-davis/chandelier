@@ -1,7 +1,8 @@
 //! A horizontal reference line at a fixed value.
 
 use ratatui_core::buffer::Buffer;
-use ratatui_core::style::{Color, Style};
+use ratatui_core::layout::Alignment;
+use ratatui_core::style::{Color, Modifier, Style};
 
 use crate::overlay::OverlayDraw;
 use crate::render::{self, PlotLayout};
@@ -16,29 +17,22 @@ pub enum LineStyle {
     Dashed,
 }
 
-/// Where a [`ValueLine`]'s label sits along the line.
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum LabelSide {
-    /// Right-aligned at the plot's right edge, next to the value axis.
-    #[default]
-    NearAxis,
-    /// Left-aligned at the plot's left edge, over the start of the line.
-    Inline,
-}
-
 /// A horizontal line drawn across the whole plot at a fixed value.
 ///
 /// Useful for a reference level such as support or resistance, the last price,
 /// or a volume threshold. The line spans the full plot width at the row its
-/// value maps to. It can also have an optional label displayed next to it. By
-/// default, the chart expands its value axis so the line stays in view.
+/// value maps to. It can also have an optional label, aligned to the left,
+/// center, or right of the line. By default, the chart expands its value axis
+/// so the line stays in view.
 #[derive(Debug, Clone)]
 pub struct ValueLine<'a> {
     value: f64,
     style: Style,
     line: LineStyle,
     label: Option<&'a str>,
-    label_side: LabelSide,
+    label_alignment: Alignment,
+    label_inset: u16,
+    label_padding: u16,
     autoscale: bool,
 }
 
@@ -50,7 +44,9 @@ impl<'a> ValueLine<'a> {
             style: Style::new().fg(Color::Gray),
             line: LineStyle::Solid,
             label: None,
-            label_side: LabelSide::NearAxis,
+            label_alignment: Alignment::Right,
+            label_inset: 0,
+            label_padding: 1,
             autoscale: true,
         }
     }
@@ -84,10 +80,30 @@ impl<'a> ValueLine<'a> {
         self
     }
 
-    /// Sets where the label sits along the line.
+    /// Sets how the label is aligned along the line: against the left edge,
+    /// centered, or against the right edge (next to the value axis). Defaults to
+    /// [`Alignment::Right`].
     #[must_use]
-    pub fn label_side(mut self, side: LabelSide) -> Self {
-        self.label_side = side;
+    pub fn label_alignment(mut self, alignment: Alignment) -> Self {
+        self.label_alignment = alignment;
+        self
+    }
+
+    /// Sets how many columns of line lead in from the aligned edge before the
+    /// label, so a left- or right-aligned label sits inset in the line rather
+    /// than flush against the edge (`──RESISTANCE────`). Ignored when the label
+    /// is centered. Defaults to `0`.
+    #[must_use]
+    pub fn label_inset(mut self, inset: u16) -> Self {
+        self.label_inset = inset;
+        self
+    }
+
+    /// Sets how many blank columns separate the label from the line on each
+    /// side, so the line breaks cleanly around the text. Defaults to `1`.
+    #[must_use]
+    pub fn label_padding(mut self, padding: u16) -> Self {
+        self.label_padding = padding;
         self
     }
 
@@ -112,22 +128,65 @@ impl OverlayDraw for ValueLine<'_> {
         }
 
         let row = layout.value.value_to_row(self.value);
+        let y = plot.y + row;
         let glyph = match self.line {
             LineStyle::Solid => "─",
             LineStyle::Dashed => "╌",
         };
 
+        // Paint on the chart background so the line and label read as opaque
+        // marks over the candles. Clearing REVERSED keeps a candle cell's
+        // foreground/background inversion from swapping the colors we set.
+        let bg = self.style.bg.unwrap_or(layout.bg);
+        let style = self.style.bg(bg).remove_modifier(Modifier::REVERSED);
+
         for col in 0..plot.width {
-            render::put(buf, plot, u32::from(col), u32::from(row), glyph, self.style);
+            render::put(buf, plot, u32::from(col), u32::from(row), glyph, style);
         }
 
         if let Some(label) = self.label {
             let len = label.chars().count() as u16;
-            let x = match self.label_side {
-                LabelSide::NearAxis => (plot.x + plot.width).saturating_sub(len).max(plot.x),
-                LabelSide::Inline => plot.x,
+            let right = plot.x + plot.width;
+            let pad = self.label_padding;
+            let inset = self.label_inset;
+            let max_start = right.saturating_sub(len).max(plot.x);
+
+            // `inset` columns of line lead in from the aligned edge before the
+            // label. A padding gap separates the label from the line on each side
+            // that carries line: the inner side always, and the lead-in (edge)
+            // side only when the label is inset. A flush label keeps no gap
+            // against its edge. The lead-in columns themselves stay as line.
+            let edge_gap = if inset > 0 { pad } else { 0 };
+            let (start, gap_start, gap_end) = match self.label_alignment {
+                Alignment::Left => {
+                    let start = (plot.x + inset + edge_gap).min(max_start);
+                    (start, plot.x + inset, start + len + pad)
+                }
+                Alignment::Right => {
+                    let start = right
+                        .saturating_sub(inset)
+                        .saturating_sub(edge_gap)
+                        .saturating_sub(len)
+                        .clamp(plot.x, max_start);
+                    (
+                        start,
+                        start.saturating_sub(pad),
+                        right.saturating_sub(inset),
+                    )
+                }
+                Alignment::Center => {
+                    let start = (plot.x + plot.width.saturating_sub(len) / 2).min(max_start);
+                    (start, start.saturating_sub(pad), start + len + pad)
+                }
             };
-            buf.set_string(x, plot.y + row, label, self.style);
+
+            // Break the line by clearing the padding gaps to the background,
+            // then draw the label on top.
+            let blank = Style::new().bg(bg).remove_modifier(Modifier::REVERSED);
+            for cx in gap_start.max(plot.x)..gap_end.min(right) {
+                buf.set_string(cx, y, " ", blank);
+            }
+            buf.set_string(start, y, label, style);
         }
     }
 }
@@ -143,10 +202,12 @@ mod tests {
     }
 
     #[test]
-    fn defaults_are_solid_near_axis_and_unlabeled() {
+    fn defaults_are_solid_right_aligned_and_unlabeled() {
         let line = ValueLine::at(1.0);
         assert_eq!(line.line, LineStyle::Solid);
-        assert_eq!(line.label_side, LabelSide::NearAxis);
+        assert_eq!(line.label_alignment, Alignment::Right);
+        assert_eq!(line.label_inset, 0);
+        assert_eq!(line.label_padding, 1);
         assert!(line.label.is_none());
         assert!(line.autoscale);
     }
