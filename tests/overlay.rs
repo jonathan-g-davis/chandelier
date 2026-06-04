@@ -2,8 +2,8 @@
 //! on the grid.
 
 use chandelier::{
-    Candle, CandleSeries, CandlestickChart, Label, LineStyle, TrendLine, Volume, VolumeChart,
-    VolumeSeries,
+    Anchor, Annotation, Annotations, Candle, CandleSeries, CandlestickChart, Label, LineStyle,
+    TrendLine, Volume, VolumeChart, VolumeSeries,
 };
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::{Alignment, Rect};
@@ -30,6 +30,14 @@ fn row_with_symbol(buf: &Buffer, symbol: &str) -> Option<u16> {
     let area = *buf.area();
     (area.y..area.y + area.height)
         .find(|&y| (area.x..area.x + area.width).any(|x| buf[(x, y)].symbol() == symbol))
+}
+
+/// The coordinates of the first cell whose symbol equals `symbol`.
+fn cell_of(buf: &Buffer, symbol: &str) -> Option<(u16, u16)> {
+    let area = *buf.area();
+    (area.y..area.y + area.height)
+        .flat_map(|y| (area.x..area.x + area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| buf[(x, y)].symbol() == symbol)
 }
 
 fn candles() -> [Candle; 3] {
@@ -283,4 +291,115 @@ fn volume_overlay_raises_the_top_but_keeps_the_zero_floor() {
     // The bottom row still holds bars in both, so the floor did not move.
     let floor = 12 - 1 - 1; // minus the time axis row
     assert_eq!(row_text(&plain_buf, floor), row_text(&buf, floor));
+}
+
+#[test]
+fn anchor_places_the_symbol_above_on_or_below_the_value() {
+    let candles = candles();
+    let items = [
+        Annotation::new(1, 104.0).symbol("U").anchor(Anchor::Above),
+        Annotation::new(1, 104.0).symbol("O").anchor(Anchor::On),
+        Annotation::new(1, 104.0).symbol("D").anchor(Anchor::Below),
+    ];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .overlay(Annotations::new(&items));
+    let buf = render(&chart, 24, 14);
+
+    let u = cell_of(&buf, "U").unwrap();
+    let o = cell_of(&buf, "O").unwrap();
+    let d = cell_of(&buf, "D").unwrap();
+    assert!(
+        u.1 < o.1 && o.1 < d.1,
+        "Above < On < Below: {u:?} {o:?} {d:?}"
+    );
+    assert_eq!(u.0, o.0, "same column");
+    assert_eq!(o.0, d.0, "same column");
+}
+
+#[test]
+fn marker_aligns_with_its_candle_column_at_width_one() {
+    let candles = candles();
+    let items = [Annotation::new(1, 104.0).symbol("◆")];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(1.0).gap(1.0))
+        .axes(false)
+        .overlay(Annotations::new(&items));
+    let buf = render(&chart, 20, 14);
+
+    let diamond = cell_of(&buf, "◆").expect("marker drawn");
+    // Width-1 candles tile every other column; candle index 1 sits in column 2,
+    // not the gap at column 1 or 3.
+    assert_eq!(diamond.0, 2, "marker should sit on the candle column");
+}
+
+#[test]
+fn custom_symbol_and_style_are_honored() {
+    let candles = candles();
+    let items = [Annotation::new(1, 104.0).symbol("◆").style(Color::Cyan)];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .overlay(Annotations::new(&items));
+    let buf = render(&chart, 24, 12);
+
+    let diamond = cell_of(&buf, "◆").expect("custom symbol");
+    assert_eq!(buf[diamond].fg, Color::Cyan);
+}
+
+#[test]
+fn label_only_annotation_draws_text_with_no_symbol() {
+    let candles = candles();
+    let items = [Annotation::new(1, 104.0).label("HI")];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .overlay(Annotations::new(&items));
+    let buf = render(&chart, 24, 12);
+
+    assert!(cell_of(&buf, "H").is_some(), "label text present");
+    assert!(cell_of(&buf, "▲").is_none(), "no marker glyph");
+}
+
+#[test]
+fn off_screen_annotation_is_dropped_without_panic() {
+    // Far more candles than fit, so the earliest scroll out of view.
+    let candles: Vec<Candle> = (0..200)
+        .map(|i| {
+            let b = 100.0 + (i as f64 % 13.0);
+            Candle::new(b, b + 2.0, b - 2.0, b + 1.0)
+        })
+        .collect();
+    let items = [Annotation::new(0, 100.0).symbol("◆")];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(1.0).gap(0.0))
+        .axes(false)
+        .overlay(Annotations::new(&items));
+    let buf = render(&chart, 24, 12);
+
+    assert!(
+        cell_of(&buf, "◆").is_none(),
+        "an annotation scrolled out of view is not drawn"
+    );
+}
+
+#[test]
+fn annotations_autoscale_to_keep_markers_in_view() {
+    let candles = candles();
+    let items = [Annotation::new(1, 150.0).symbol("◆")];
+
+    let chart =
+        CandlestickChart::new(CandleSeries::new(&candles)).overlay(Annotations::new(&items));
+    let buf = render(&chart, 40, 16);
+    assert!(cell_of(&buf, "◆").is_some(), "marker should be visible");
+    let text: String = buf.content().iter().map(|c| c.symbol()).collect();
+    assert!(text.contains("120"), "axis should expand toward the marker");
+
+    let pinned = CandlestickChart::new(CandleSeries::new(&candles))
+        .overlay(Annotations::new(&items).autoscale(false));
+    let ptext: String = render(&pinned, 40, 16)
+        .content()
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(
+        !ptext.contains("120"),
+        "axis should not expand when autoscale is off"
+    );
 }

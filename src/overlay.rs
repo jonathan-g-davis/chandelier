@@ -5,9 +5,11 @@
 //! added to a chart with its `overlay` builder and drawn in the order they are
 //! added, after the series and before the axes.
 
+mod annotation;
 mod label;
 mod trend_line;
 
+pub use annotation::{Anchor, Annotation, Annotations};
 pub use label::Label;
 pub use trend_line::{LineStyle, TrendLine};
 
@@ -32,18 +34,22 @@ pub(crate) trait OverlayDraw {
 pub enum Overlay<'a> {
     /// A straight line drawn on the value scale.
     Trend(TrendLine<'a>),
+    /// Point annotations aligned to the candles.
+    Annotations(Annotations<'a>),
 }
 
 impl Overlay<'_> {
     pub(crate) fn value_bounds(&self) -> Option<(f64, f64)> {
         match self {
             Overlay::Trend(o) => o.value_bounds(),
+            Overlay::Annotations(o) => o.value_bounds(),
         }
     }
 
     pub(crate) fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
         match self {
             Overlay::Trend(o) => o.draw(buf, layout),
+            Overlay::Annotations(o) => o.draw(buf, layout),
         }
     }
 }
@@ -51,6 +57,12 @@ impl Overlay<'_> {
 impl<'a> From<TrendLine<'a>> for Overlay<'a> {
     fn from(line: TrendLine<'a>) -> Self {
         Overlay::Trend(line)
+    }
+}
+
+impl<'a> From<Annotations<'a>> for Overlay<'a> {
+    fn from(annotations: Annotations<'a>) -> Self {
+        Overlay::Annotations(annotations)
     }
 }
 

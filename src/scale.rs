@@ -156,10 +156,10 @@ impl TimeScale {
     }
 
     /// Center column of the visible candle at `visible_index`, rounded to a
-    /// whole column. Used to place the bottom-axis label under the candle.
+    /// whole column. Used to align items with the candle's center.
     pub fn index_to_center_col(&self, visible_index: usize) -> u16 {
         let center = self.index_to_left(visible_index) + self.candle_width / 2.0;
-        center.round() as u16
+        center.floor() as u16
     }
 
     /// Inverse of [`index_to_left`](Self::index_to_left): the visible candle a
@@ -243,5 +243,21 @@ mod tests {
         let time = TimeScale::new(12, 100, 3.0, 1.0);
         assert!(time.visible() < 100);
         assert_eq!(time.first_visible() + time.visible(), 100);
+    }
+
+    #[test]
+    fn center_column_lands_on_the_candle() {
+        // Width-1 candles tile every other column; the center is the candle's own
+        // column, not the empty gap to its right.
+        let time = TimeScale::new(20, 5, 1.0, 1.0);
+        assert_eq!(time.index_to_center_col(0), 0);
+        assert_eq!(time.index_to_center_col(1), 2);
+        assert_eq!(time.index_to_center_col(2), 4);
+
+        // Width-3 candles: the center is the middle column of the body, where the
+        // wick is drawn.
+        let time = TimeScale::new(20, 5, 3.0, 1.0);
+        assert_eq!(time.index_to_center_col(0), 1); // body columns 0, 1, 2
+        assert_eq!(time.index_to_center_col(1), 5); // body columns 4, 5, 6
     }
 }
