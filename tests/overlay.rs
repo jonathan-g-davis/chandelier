@@ -335,6 +335,24 @@ fn a_gap_breaks_the_line() {
 }
 
 #[test]
+fn an_underlay_is_occluded_by_the_candles() {
+    let candles = candles();
+    let values = [Some(104.0), Some(104.0), Some(104.0)];
+    let front = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .overlay(LineOverlay::new(&values).style(Color::Magenta));
+    let behind = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .underlay(LineOverlay::new(&values).style(Color::Magenta));
+
+    assert!(
+        count_fg(&render(&behind, 24, 12), Color::Magenta)
+            < count_fg(&render(&front, 24, 12), Color::Magenta),
+        "candles drawn after an underlay should occlude part of it"
+    );
+}
+
+#[test]
 fn all_none_line_draws_nothing() {
     let candles = candles();
     let none = [None, None, None];
