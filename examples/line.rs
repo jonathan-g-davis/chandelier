@@ -59,8 +59,9 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
     let [top, bottom] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
         .areas(frame.area());
 
-    // RSI: a single line bounded in practice to 0..100, with dashed reference
-    // levels at the conventional overbought (70) and oversold (30) thresholds.
+    // RSI: a single line on a value axis pinned to its natural 0..100 range, so
+    // the dashed reference levels at the conventional overbought (70) and
+    // oversold (30) thresholds stay fixed instead of drifting with autoscale.
     let rsi_values = rsi(&closes, 14);
     let rsi_chart = LineChart::new(LineSeries::new(&rsi_values).style(Color::Rgb(124, 179, 66)))
         .block(
@@ -71,7 +72,12 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         .style(base)
         .width(1.0)
         .gap(1.0)
-        .value_axis(ValueAxis::default().style(axis_style))
+        .value_axis(
+            ValueAxis::default()
+                .style(axis_style)
+                .bounds([0.0, 100.0])
+                .ticks(&[0.0, 30.0, 70.0, 100.0]),
+        )
         .time_axis(TimeAxis::default().style(axis_style).labels(labels))
         .overlay(
             TrendLine::at(70.0)

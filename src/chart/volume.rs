@@ -29,7 +29,7 @@ pub struct VolumeChart<'a> {
     series: VolumeSeries<'a>,
     base: Style,
     pad_frac: f64,
-    value_axis: ValueAxis,
+    value_axis: ValueAxis<'a>,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
     underlays: Vec<Overlay<'a>>,
@@ -70,7 +70,7 @@ impl<'a> VolumeChart<'a> {
 
     /// Sets the value (vertical) axis.
     #[must_use]
-    pub fn value_axis(mut self, axis: ValueAxis) -> Self {
+    pub fn value_axis(mut self, axis: ValueAxis<'a>) -> Self {
         self.value_axis = axis;
         self
     }
@@ -162,8 +162,9 @@ impl<'a> VolumeChart<'a> {
     /// Computes the plot rectangle and the value and time scales for `area`.
     ///
     /// The value scale is anchored at zero so bars rise from the baseline, with
-    /// `pad_frac` of headroom above the tallest bar. Returns `None` when no plot
-    /// fits or there is nothing to draw.
+    /// `pad_frac` of headroom above the tallest bar. A pinned range on the value
+    /// axis overrides this, baseline and all. Returns `None` when no plot fits or
+    /// there is nothing to draw.
     fn layout(&self, area: Rect, bg: Color) -> Option<PlotLayout> {
         let right_axis_w = if self.show_axes {
             self.value_axis.width
@@ -183,11 +184,16 @@ impl<'a> VolumeChart<'a> {
             height: area.height - bottom_axis_h,
         };
 
-        let (_, hi) = self.series.value_bounds()?;
-        // Overlays may raise the top, but the baseline stays anchored at zero.
-        let hi = overlay::union_bounds((0.0, hi), &self.underlays).1;
-        let hi = overlay::union_bounds((0.0, hi), &self.overlays).1;
-        let value = ValueScale::new(0.0, hi * (1.0 + self.pad_frac), plot.height);
+        let value = match self.value_axis.bounds {
+            Some([min, max]) => ValueScale::new(min, max, plot.height),
+            None => {
+                let (_, hi) = self.series.value_bounds()?;
+                // Overlays may raise the top, but the baseline stays at zero.
+                let hi = overlay::union_bounds((0.0, hi), &self.underlays).1;
+                let hi = overlay::union_bounds((0.0, hi), &self.overlays).1;
+                ValueScale::new(0.0, hi * (1.0 + self.pad_frac), plot.height)
+            }
+        };
         let time = self.series.time_scale(plot);
 
         Some(PlotLayout {
