@@ -5,8 +5,10 @@
 //! added to a chart with its `overlay` builder and drawn in the order they are
 //! added, after the series and before the axes.
 
+mod label;
 mod value_line;
 
+pub use label::Label;
 pub use value_line::{LineStyle, ValueLine};
 
 use ratatui_core::buffer::Buffer;

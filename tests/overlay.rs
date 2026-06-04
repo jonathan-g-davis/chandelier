@@ -2,7 +2,8 @@
 //! on the grid.
 
 use chandelier::{
-    Candle, CandleSeries, CandlestickChart, LineStyle, ValueLine, Volume, VolumeChart, VolumeSeries,
+    Candle, CandleSeries, CandlestickChart, Label, LineStyle, ValueLine, Volume, VolumeChart,
+    VolumeSeries,
 };
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::{Alignment, Rect};
@@ -111,11 +112,7 @@ fn label_left_alignment_starts_at_the_left_edge() {
     let candles = candles();
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
-        .overlay(
-            ValueLine::at(104.0)
-                .label("LAST")
-                .label_alignment(Alignment::Left),
-        );
+        .overlay(ValueLine::at(104.0).label(Label::new("LAST").alignment(Alignment::Left)));
     let buf = render(&chart, 24, 12);
 
     let y = row_with_symbol(&buf, "─").unwrap();
@@ -129,10 +126,7 @@ fn centered_label_breaks_the_line_with_padding() {
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .overlay(
-            ValueLine::at(104.0)
-                .label("LAST")
-                .label_alignment(Alignment::Center)
-                .label_padding(2),
+            ValueLine::at(104.0).label(Label::new("LAST").alignment(Alignment::Center).padding(2)),
         );
     let buf = render(&chart, 24, 12);
 
@@ -159,11 +153,12 @@ fn label_inset_leads_in_with_line_before_the_label() {
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .overlay(
-            ValueLine::at(104.0)
-                .label("RES")
-                .label_alignment(Alignment::Left)
-                .label_inset(2)
-                .label_padding(0),
+            ValueLine::at(104.0).label(
+                Label::new("RES")
+                    .alignment(Alignment::Left)
+                    .inset(2)
+                    .padding(0),
+            ),
         );
     let buf = render(&chart, 24, 12);
 
@@ -188,8 +183,7 @@ fn line_and_label_paint_on_the_chart_background() {
         .overlay(
             ValueLine::at(104.0)
                 .style(Color::White)
-                .label("LAST")
-                .label_alignment(Alignment::Center),
+                .label(Label::new("LAST").alignment(Alignment::Center)),
         );
     let buf = render(&chart, 24, 12);
 
