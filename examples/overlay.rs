@@ -11,7 +11,8 @@
 //! Press `q` or `Esc` to quit.
 
 use chandelier::{
-    Candle, CandleSeries, CandlestickChart, Label, PriceAxis, TimeAxis, TrendLine, price_bounds,
+    Annotation, Annotations, Candle, CandleSeries, CandlestickChart, Label, PriceAxis, TimeAxis,
+    TrendLine, price_bounds,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -57,6 +58,13 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
     let last = candles.last().map_or(0.0, |c| c.close);
     let (_, high) = price_bounds(candles).unwrap_or((0.0, 0.0));
 
+    // Add buy/sell markers at a candle's low and high.
+    let n = candles.len();
+    let trades = [
+        Annotation::buy(n - 12, candles[n - 12].low),
+        Annotation::sell(n - 5, candles[n - 5].high),
+    ];
+
     let candle_series = CandleSeries::new(candles)
         .width(1.0)
         .gap(1.0)
@@ -93,7 +101,9 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
                 .dashed()
                 .style(bull)
                 .label(Label::new("SUPPORT").alignment(Alignment::Center)),
-        );
+        )
+        // Buy/sell markers, drawn with their conventional triangles and labels.
+        .overlay(Annotations::new(&trades));
 
     frame.render_widget(&chart, frame.area());
 }
