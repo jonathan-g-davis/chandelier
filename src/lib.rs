@@ -37,6 +37,7 @@
 mod axis;
 mod chart;
 mod marker;
+mod overlay;
 mod render;
 mod scale;
 mod series;
@@ -44,5 +45,6 @@ mod series;
 pub use axis::{PriceAxis, TimeAxis, ValueAxis};
 pub use chart::{CandlestickChart, VolumeChart};
 pub use marker::Marker;
+pub use overlay::{LabelSide, LineStyle, Overlay, ValueLine};
 pub use render::BodyFill;
 pub use series::{Candle, CandleSeries, Direction, Volume, VolumeSeries, price_bounds};
