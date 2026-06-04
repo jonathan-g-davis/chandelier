@@ -8,6 +8,7 @@ use crate::render::{self, PlotLayout};
 
 /// Whether a [`ValueLine`] is drawn solid or dashed.
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum LineStyle {
     /// A continuous line (`─`).
     #[default]
