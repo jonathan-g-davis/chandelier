@@ -7,7 +7,57 @@ use std::collections::BTreeMap;
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
-use ratatui_core::style::{Color, Modifier};
+use ratatui_core::style::{Color, Modifier, Style};
+
+use crate::marker::Marker;
+use crate::render::PlotLayout;
+
+/// The value span covered by `values`, ignoring `None` gaps, or `None` when no
+/// value is present. Used to autoscale a chart to an index-aligned line.
+pub(crate) fn line_value_bounds(values: &[Option<f64>]) -> Option<(f64, f64)> {
+    let mut iter = values.iter().flatten().copied();
+    let first = iter.next()?;
+    let (mut lo, mut hi) = (first, first);
+    for value in iter {
+        lo = lo.min(value);
+        hi = hi.max(value);
+    }
+    Some((lo, hi))
+}
+
+/// Draws `values` as a connected line over the plot, aligned one-to-one with the
+/// columns of `layout`, where `None` breaks the line. Each value is aligned to
+/// the center of its index's column, drawn in `style`'s foreground over its
+/// background (falling back to the plot background) with `marker`'s glyphs.
+pub(crate) fn draw_value_line(
+    buf: &mut Buffer,
+    layout: &PlotLayout,
+    values: &[Option<f64>],
+    style: Style,
+    marker: Marker,
+) {
+    let plot = layout.plot;
+    if plot.width == 0 || plot.height == 0 {
+        return;
+    }
+
+    let time = &layout.time;
+    let scale = &layout.value;
+    let color = style.fg.unwrap_or(Color::Reset);
+    let bg = style.bg.unwrap_or(layout.bg);
+
+    let points: Vec<Option<(f64, f64)>> = (0..time.visible())
+        .map(|vi| {
+            let value = (*values.get(time.first_visible() + vi)?)?;
+            let col = time.index_to_left(vi) + time.candle_width() / 2.0;
+            Some((col, scale.value_to_row_f64(value)))
+        })
+        .collect();
+
+    marker
+        .line_rasterizer()
+        .draw_polyline(buf, plot, &points, color, bg);
+}
 
 /// A backend that draws a polyline by quantizing it to a glyph family's sub-cell
 /// grid.

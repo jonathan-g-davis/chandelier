@@ -5,7 +5,7 @@ use ratatui_core::style::{Color, Style};
 
 use crate::marker::Marker;
 use crate::overlay::OverlayDraw;
-use crate::render::PlotLayout;
+use crate::render::{PlotLayout, draw_value_line, line_value_bounds};
 
 /// A connected line over the candles, drawn from values aligned to them.
 #[derive(Debug, Clone)]
@@ -60,38 +60,11 @@ impl OverlayDraw for LineOverlay<'_> {
         if !self.autoscale {
             return None;
         }
-        let mut iter = self.values.iter().flatten().copied();
-        let first = iter.next()?;
-        let (mut lo, mut hi) = (first, first);
-        for value in iter {
-            lo = lo.min(value);
-            hi = hi.max(value);
-        }
-        Some((lo, hi))
+        line_value_bounds(self.values)
     }
 
     fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
-        let plot = layout.plot;
-        if plot.width == 0 || plot.height == 0 {
-            return;
-        }
-
-        let time = &layout.time;
-        let scale = &layout.value;
-        let color = self.style.fg.unwrap_or(Color::Reset);
-        let bg = self.style.bg.unwrap_or(layout.bg);
-
-        let points: Vec<Option<(f64, f64)>> = (0..time.visible())
-            .map(|vi| {
-                let value = (*self.values.get(time.first_visible() + vi)?)?;
-                let col = time.index_to_left(vi) + time.candle_width() / 2.0;
-                Some((col, scale.value_to_row_f64(value)))
-            })
-            .collect();
-
-        self.marker
-            .line_rasterizer()
-            .draw_polyline(buf, plot, &points, color, bg);
+        draw_value_line(buf, layout, self.values, self.style, self.marker);
     }
 }
 
