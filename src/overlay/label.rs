@@ -5,7 +5,7 @@ use ratatui_core::layout::{Alignment, Rect};
 use ratatui_core::style::{Color, Modifier, Style};
 
 /// A text label drawn along a horizontal line, such as a
-/// [`ValueLine`](crate::ValueLine)'s.
+/// [`TrendLine`](crate::TrendLine)'s.
 ///
 /// The label is placed by its [`alignment`](Self::alignment) (against the left
 /// edge, centered, or against the right edge), optionally [`inset`](Self::inset)

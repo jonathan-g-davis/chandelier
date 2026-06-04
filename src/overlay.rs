@@ -6,10 +6,10 @@
 //! added, after the series and before the axes.
 
 mod label;
-mod value_line;
+mod trend_line;
 
 pub use label::Label;
-pub use value_line::{LineStyle, ValueLine};
+pub use trend_line::{LineStyle, TrendLine};
 
 use ratatui_core::buffer::Buffer;
 
@@ -30,27 +30,27 @@ pub(crate) trait OverlayDraw {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Overlay<'a> {
-    /// A horizontal reference line at a fixed value.
-    Value(ValueLine<'a>),
+    /// A straight line drawn on the value scale.
+    Trend(TrendLine<'a>),
 }
 
 impl Overlay<'_> {
     pub(crate) fn value_bounds(&self) -> Option<(f64, f64)> {
         match self {
-            Overlay::Value(o) => o.value_bounds(),
+            Overlay::Trend(o) => o.value_bounds(),
         }
     }
 
     pub(crate) fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
         match self {
-            Overlay::Value(o) => o.draw(buf, layout),
+            Overlay::Trend(o) => o.draw(buf, layout),
         }
     }
 }
 
-impl<'a> From<ValueLine<'a>> for Overlay<'a> {
-    fn from(line: ValueLine<'a>) -> Self {
-        Overlay::Value(line)
+impl<'a> From<TrendLine<'a>> for Overlay<'a> {
+    fn from(line: TrendLine<'a>) -> Self {
+        Overlay::Trend(line)
     }
 }
 

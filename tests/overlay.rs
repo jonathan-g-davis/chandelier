@@ -2,7 +2,7 @@
 //! on the grid.
 
 use chandelier::{
-    Candle, CandleSeries, CandlestickChart, Label, LineStyle, ValueLine, Volume, VolumeChart,
+    Candle, CandleSeries, CandlestickChart, Label, LineStyle, TrendLine, Volume, VolumeChart,
     VolumeSeries,
 };
 use ratatui_core::buffer::Buffer;
@@ -43,7 +43,7 @@ fn candles() -> [Candle; 3] {
 #[test]
 fn value_line_spans_the_whole_plot_row() {
     let candles = candles();
-    let line = ValueLine::at(104.0).style(Color::Yellow);
+    let line = TrendLine::at(104.0).style(Color::Yellow);
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .overlay(line);
@@ -65,11 +65,11 @@ fn value_line_sits_at_the_value_row() {
     let high = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .padding(0.0)
-        .overlay(ValueLine::at(108.0));
+        .overlay(TrendLine::at(108.0));
     let low = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .padding(0.0)
-        .overlay(ValueLine::at(99.0));
+        .overlay(TrendLine::at(99.0));
 
     let high_row = row_with_symbol(&render(&high, 24, 12), "─").unwrap();
     let low_row = row_with_symbol(&render(&low, 24, 12), "─").unwrap();
@@ -84,10 +84,10 @@ fn dashed_and_solid_use_distinct_glyphs() {
     let candles = candles();
     let solid = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
-        .overlay(ValueLine::at(104.0));
+        .overlay(TrendLine::at(104.0));
     let dashed = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
-        .overlay(ValueLine::at(104.0).line(LineStyle::Dashed));
+        .overlay(TrendLine::at(104.0).line(LineStyle::Dashed));
 
     assert!(row_with_symbol(&render(&solid, 24, 12), "─").is_some());
     assert!(row_with_symbol(&render(&solid, 24, 12), "╌").is_none());
@@ -99,7 +99,7 @@ fn label_is_right_aligned_by_default() {
     let candles = candles();
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
-        .overlay(ValueLine::at(104.0).label("LAST"));
+        .overlay(TrendLine::at(104.0).label("LAST"));
     let buf = render(&chart, 24, 12);
 
     let y = row_with_symbol(&buf, "─").unwrap();
@@ -112,7 +112,7 @@ fn label_left_alignment_starts_at_the_left_edge() {
     let candles = candles();
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
-        .overlay(ValueLine::at(104.0).label(Label::new("LAST").alignment(Alignment::Left)));
+        .overlay(TrendLine::at(104.0).label(Label::new("LAST").alignment(Alignment::Left)));
     let buf = render(&chart, 24, 12);
 
     let y = row_with_symbol(&buf, "─").unwrap();
@@ -126,7 +126,7 @@ fn centered_label_breaks_the_line_with_padding() {
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .overlay(
-            ValueLine::at(104.0).label(Label::new("LAST").alignment(Alignment::Center).padding(2)),
+            TrendLine::at(104.0).label(Label::new("LAST").alignment(Alignment::Center).padding(2)),
         );
     let buf = render(&chart, 24, 12);
 
@@ -153,7 +153,7 @@ fn label_inset_leads_in_with_line_before_the_label() {
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
         .overlay(
-            ValueLine::at(104.0).label(
+            TrendLine::at(104.0).label(
                 Label::new("RES")
                     .alignment(Alignment::Left)
                     .inset(2)
@@ -181,7 +181,7 @@ fn line_and_label_paint_on_the_chart_background() {
         .axes(false)
         .style(Style::new().bg(base))
         .overlay(
-            ValueLine::at(104.0)
+            TrendLine::at(104.0)
                 .style(Color::White)
                 .label(Label::new("LAST").alignment(Alignment::Center)),
         );
@@ -204,7 +204,7 @@ fn overlay_only_touches_its_own_row() {
     let plain = CandlestickChart::new(CandleSeries::new(&candles)).axes(false);
     let with_line = CandlestickChart::new(CandleSeries::new(&candles))
         .axes(false)
-        .overlay(ValueLine::at(104.0));
+        .overlay(TrendLine::at(104.0));
 
     let before = render(&plain, 24, 12);
     let after = render(&with_line, 24, 12);
@@ -228,7 +228,7 @@ fn autoscale_expands_to_keep_an_out_of_range_line_visible() {
     // A line far above every candle high is still drawn when autoscale is on,
     // and the price axis grows to include it.
     let candles = candles();
-    let chart = CandlestickChart::new(CandleSeries::new(&candles)).overlay(ValueLine::at(150.0));
+    let chart = CandlestickChart::new(CandleSeries::new(&candles)).overlay(TrendLine::at(150.0));
     let buf = render(&chart, 40, 16);
 
     assert!(
@@ -249,7 +249,7 @@ fn autoscale_off_pins_the_axis_and_clamps_the_line() {
     // With autoscale off the axis ignores the line, which clamps to the top row.
     let candles = candles();
     let chart = CandlestickChart::new(CandleSeries::new(&candles))
-        .overlay(ValueLine::at(150.0).autoscale(false));
+        .overlay(TrendLine::at(150.0).autoscale(false));
     let buf = render(&chart, 40, 16);
 
     let text: String = buf.content().iter().map(|c| c.symbol()).collect();
@@ -270,7 +270,7 @@ fn volume_overlay_raises_the_top_but_keeps_the_zero_floor() {
     plain.render(area, &mut plain_buf);
 
     let chart = VolumeChart::new(VolumeSeries::new(&volumes))
-        .overlay(ValueLine::at(40.0).style(Style::new().fg(Color::Cyan)));
+        .overlay(TrendLine::at(40.0).style(Style::new().fg(Color::Cyan)));
     let mut buf = Buffer::empty(area);
     chart.render(area, &mut buf);
 

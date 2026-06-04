@@ -1,4 +1,4 @@
-//! A horizontal reference line at a fixed value.
+//! A straight line drawn on the chart's value scale.
 
 use ratatui_core::buffer::Buffer;
 use ratatui_core::style::{Color, Modifier, Style};
@@ -6,7 +6,7 @@ use ratatui_core::style::{Color, Modifier, Style};
 use crate::overlay::{Label, OverlayDraw};
 use crate::render::{self, PlotLayout};
 
-/// Whether a [`ValueLine`] is drawn solid or dashed.
+/// Whether a [`TrendLine`] is drawn solid or dashed.
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum LineStyle {
@@ -17,26 +17,28 @@ pub enum LineStyle {
     Dashed,
 }
 
-/// A horizontal line drawn across the whole plot at a fixed value.
-///
-/// Useful for a reference level such as support or resistance, the last price,
-/// or a volume threshold. The line spans the full plot width at the row its
-/// value maps to. It can also carry an optional [`Label`]. By default, the chart
-/// expands its value axis so the line stays in view.
+/// The shape a [`TrendLine`] traces on the chart.
 #[derive(Debug, Clone)]
-pub struct ValueLine<'a> {
-    value: f64,
+enum Geometry {
+    /// A horizontal line at a value, spanning the full plot width.
+    Level(f64),
+}
+
+/// A straight line drawn on the chart's value scale.
+#[derive(Debug, Clone)]
+pub struct TrendLine<'a> {
+    geometry: Geometry,
     style: Style,
     line: LineStyle,
     label: Option<Label<'a>>,
     autoscale: bool,
 }
 
-impl<'a> ValueLine<'a> {
-    /// Creates a solid gray line at `value` with no label.
+impl<'a> TrendLine<'a> {
+    /// Creates a solid gray horizontal line at `value` with no label.
     pub fn at(value: f64) -> Self {
         Self {
-            value,
+            geometry: Geometry::Level(value),
             style: Style::new().fg(Color::Gray),
             line: LineStyle::Solid,
             label: None,
@@ -82,20 +84,11 @@ impl<'a> ValueLine<'a> {
         self.autoscale = autoscale;
         self
     }
-}
 
-impl OverlayDraw for ValueLine<'_> {
-    fn value_bounds(&self) -> Option<(f64, f64)> {
-        self.autoscale.then_some((self.value, self.value))
-    }
-
-    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
+    /// Draws a horizontal level across the plot, with its label if any.
+    fn draw_level(&self, value: f64, buf: &mut Buffer, layout: &PlotLayout) {
         let plot = layout.plot;
-        if plot.width == 0 || plot.height == 0 {
-            return;
-        }
-
-        let row = layout.value.value_to_row(self.value);
+        let row = layout.value.value_to_row(value);
         let glyph = match self.line {
             LineStyle::Solid => "─",
             LineStyle::Dashed => "╌",
@@ -118,19 +111,41 @@ impl OverlayDraw for ValueLine<'_> {
     }
 }
 
+impl OverlayDraw for TrendLine<'_> {
+    fn value_bounds(&self) -> Option<(f64, f64)> {
+        if !self.autoscale {
+            return None;
+        }
+        match self.geometry {
+            Geometry::Level(value) => Some((value, value)),
+        }
+    }
+
+    fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
+        let plot = layout.plot;
+        if plot.width == 0 || plot.height == 0 {
+            return;
+        }
+
+        match self.geometry {
+            Geometry::Level(value) => self.draw_level(value, buf, layout),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn value_bounds_pins_to_the_value_and_honors_autoscale() {
-        assert_eq!(ValueLine::at(42.0).value_bounds(), Some((42.0, 42.0)));
-        assert_eq!(ValueLine::at(42.0).autoscale(false).value_bounds(), None);
+    fn value_bounds_pins_to_the_level_and_honors_autoscale() {
+        assert_eq!(TrendLine::at(42.0).value_bounds(), Some((42.0, 42.0)));
+        assert_eq!(TrendLine::at(42.0).autoscale(false).value_bounds(), None);
     }
 
     #[test]
     fn defaults_are_solid_and_unlabeled() {
-        let line = ValueLine::at(1.0);
+        let line = TrendLine::at(1.0);
         assert_eq!(line.line, LineStyle::Solid);
         assert!(line.label.is_none());
         assert!(line.autoscale);
