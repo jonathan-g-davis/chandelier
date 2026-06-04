@@ -7,6 +7,7 @@ use ratatui_core::widgets::Widget;
 use ratatui_widgets::block::{Block, BlockExt};
 
 use crate::axis::{self, TimeAxis, ValueAxis};
+use crate::overlay::{self, Overlay};
 use crate::render::{PlotLayout, Series};
 use crate::scale::ValueScale;
 use crate::series::VolumeSeries;
@@ -31,6 +32,7 @@ pub struct VolumeChart<'a> {
     value_axis: ValueAxis,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
+    overlays: Vec<Overlay<'a>>,
 }
 
 impl<'a> VolumeChart<'a> {
@@ -44,6 +46,7 @@ impl<'a> VolumeChart<'a> {
             value_axis: ValueAxis::new(),
             time_axis: TimeAxis::new(),
             show_axes: true,
+            overlays: Vec::new(),
         }
     }
 
@@ -91,6 +94,24 @@ impl<'a> VolumeChart<'a> {
         self
     }
 
+    /// Adds an [`Overlay`] drawn on top of the bars.
+    ///
+    /// Overlays are drawn in the order they are added, after the series and
+    /// before the axes. By default they raise the top of the value axis so they
+    /// stay in view, while the baseline stays at zero.
+    #[must_use]
+    pub fn overlay(mut self, overlay: impl Into<Overlay<'a>>) -> Self {
+        self.overlays.push(overlay.into());
+        self
+    }
+
+    /// Adds several [`Overlay`]s, drawn in order on top of the bars.
+    #[must_use]
+    pub fn overlays(mut self, overlays: impl IntoIterator<Item = Overlay<'a>>) -> Self {
+        self.overlays.extend(overlays);
+        self
+    }
+
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, self.base);
 
@@ -103,6 +124,7 @@ impl<'a> VolumeChart<'a> {
         };
 
         self.series.draw(buf, &layout);
+        overlay::draw_all(&self.overlays, buf, &layout);
 
         if self.show_axes {
             axis::draw_value_axis(
@@ -141,6 +163,8 @@ impl<'a> VolumeChart<'a> {
         };
 
         let (_, hi) = self.series.value_bounds()?;
+        // Overlays may raise the top, but the baseline stays anchored at zero.
+        let hi = overlay::union_bounds((0.0, hi), &self.overlays).1;
         let value = ValueScale::new(0.0, hi * (1.0 + self.pad_frac), plot.height);
         let time = self.series.time_scale(plot);
 

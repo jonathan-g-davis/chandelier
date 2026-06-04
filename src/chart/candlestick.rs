@@ -7,6 +7,7 @@ use ratatui_core::widgets::Widget;
 use ratatui_widgets::block::{Block, BlockExt};
 
 use crate::axis::{self, PriceAxis, TimeAxis};
+use crate::overlay::{self, Overlay};
 use crate::render::{PlotLayout, Series};
 use crate::scale::PriceScale;
 use crate::series::CandleSeries;
@@ -25,6 +26,7 @@ pub struct CandlestickChart<'a> {
     price_axis: PriceAxis,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
+    overlays: Vec<Overlay<'a>>,
 }
 
 impl<'a> CandlestickChart<'a> {
@@ -38,6 +40,7 @@ impl<'a> CandlestickChart<'a> {
             price_axis: PriceAxis::new(),
             time_axis: TimeAxis::new(),
             show_axes: true,
+            overlays: Vec::new(),
         }
     }
 
@@ -81,6 +84,24 @@ impl<'a> CandlestickChart<'a> {
     #[must_use]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
+        self
+    }
+
+    /// Adds an [`Overlay`] drawn on top of the candles.
+    ///
+    /// Overlays are drawn in the order they are added, after the series and
+    /// before the axes, and by default expand the price axis so they stay in
+    /// view.
+    #[must_use]
+    pub fn overlay(mut self, overlay: impl Into<Overlay<'a>>) -> Self {
+        self.overlays.push(overlay.into());
+        self
+    }
+
+    /// Adds several [`Overlay`]s, drawn in order on top of the candles.
+    #[must_use]
+    pub fn overlays(mut self, overlays: impl IntoIterator<Item = Overlay<'a>>) -> Self {
+        self.overlays.extend(overlays);
         self
     }
 
@@ -135,6 +156,7 @@ impl<'a> CandlestickChart<'a> {
         };
 
         let (lo, hi) = self.series.value_bounds()?;
+        let (lo, hi) = overlay::union_bounds((lo, hi), &self.overlays);
         let value = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
         let time = self.series.time_scale(plot);
 
@@ -146,9 +168,11 @@ impl<'a> CandlestickChart<'a> {
         })
     }
 
-    /// Draws anything layered on top of the series, after it and before the
-    /// axes. Overlays align to `layout`'s scales. There are none by default.
-    fn draw_overlays(&self, _buf: &mut Buffer, _layout: &PlotLayout) {}
+    /// Draws the overlays on top of the series, after it and before the axes.
+    /// Overlays align to `layout`'s scales. There are none by default.
+    fn draw_overlays(&self, buf: &mut Buffer, layout: &PlotLayout) {
+        overlay::draw_all(&self.overlays, buf, layout);
+    }
 }
 
 impl Widget for &CandlestickChart<'_> {
