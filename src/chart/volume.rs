@@ -32,6 +32,7 @@ pub struct VolumeChart<'a> {
     value_axis: ValueAxis,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
+    underlays: Vec<Overlay<'a>>,
     overlays: Vec<Overlay<'a>>,
 }
 
@@ -46,6 +47,7 @@ impl<'a> VolumeChart<'a> {
             value_axis: ValueAxis::new(),
             time_axis: TimeAxis::new(),
             show_axes: true,
+            underlays: Vec::new(),
             overlays: Vec::new(),
         }
     }
@@ -112,6 +114,24 @@ impl<'a> VolumeChart<'a> {
         self
     }
 
+    /// Adds an [`Overlay`] drawn behind the bars, so the bars occlude it.
+    ///
+    /// Underlays are drawn in the order they are added, before the series. By
+    /// default they raise the top of the value axis to stay in view, while the
+    /// baseline stays at zero.
+    #[must_use]
+    pub fn underlay(mut self, underlay: impl Into<Overlay<'a>>) -> Self {
+        self.underlays.push(underlay.into());
+        self
+    }
+
+    /// Adds several [`Overlay`]s, drawn in order behind the bars.
+    #[must_use]
+    pub fn underlays(mut self, underlays: impl IntoIterator<Item = Overlay<'a>>) -> Self {
+        self.underlays.extend(underlays);
+        self
+    }
+
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, self.base);
 
@@ -123,6 +143,7 @@ impl<'a> VolumeChart<'a> {
             return;
         };
 
+        overlay::draw_all(&self.underlays, buf, &layout);
         self.series.draw(buf, &layout);
         overlay::draw_all(&self.overlays, buf, &layout);
 
@@ -164,6 +185,7 @@ impl<'a> VolumeChart<'a> {
 
         let (_, hi) = self.series.value_bounds()?;
         // Overlays may raise the top, but the baseline stays anchored at zero.
+        let hi = overlay::union_bounds((0.0, hi), &self.underlays).1;
         let hi = overlay::union_bounds((0.0, hi), &self.overlays).1;
         let value = ValueScale::new(0.0, hi * (1.0 + self.pad_frac), plot.height);
         let time = self.series.time_scale(plot);

@@ -26,6 +26,7 @@ pub struct CandlestickChart<'a> {
     price_axis: PriceAxis,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
+    underlays: Vec<Overlay<'a>>,
     overlays: Vec<Overlay<'a>>,
 }
 
@@ -40,6 +41,7 @@ impl<'a> CandlestickChart<'a> {
             price_axis: PriceAxis::new(),
             time_axis: TimeAxis::new(),
             show_axes: true,
+            underlays: Vec::new(),
             overlays: Vec::new(),
         }
     }
@@ -105,6 +107,24 @@ impl<'a> CandlestickChart<'a> {
         self
     }
 
+    /// Adds an [`Overlay`] drawn behind the candles, so the candles occlude it.
+    ///
+    /// Useful for a moving average or band that should sit under the price.
+    /// Underlays are drawn in the order they are added, before the series, and
+    /// by default expand the price axis so they stay in view.
+    #[must_use]
+    pub fn underlay(mut self, underlay: impl Into<Overlay<'a>>) -> Self {
+        self.underlays.push(underlay.into());
+        self
+    }
+
+    /// Adds several [`Overlay`]s, drawn in order behind the candles.
+    #[must_use]
+    pub fn underlays(mut self, underlays: impl IntoIterator<Item = Overlay<'a>>) -> Self {
+        self.underlays.extend(underlays);
+        self
+    }
+
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, self.base);
 
@@ -116,8 +136,9 @@ impl<'a> CandlestickChart<'a> {
             return;
         };
 
+        overlay::draw_all(&self.underlays, buf, &layout);
         self.series.draw(buf, &layout);
-        self.draw_overlays(buf, &layout);
+        overlay::draw_all(&self.overlays, buf, &layout);
 
         if self.show_axes {
             axis::draw_value_axis(
@@ -156,6 +177,7 @@ impl<'a> CandlestickChart<'a> {
         };
 
         let (lo, hi) = self.series.value_bounds()?;
+        let (lo, hi) = overlay::union_bounds((lo, hi), &self.underlays);
         let (lo, hi) = overlay::union_bounds((lo, hi), &self.overlays);
         let value = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
         let time = self.series.time_scale(plot);
@@ -166,12 +188,6 @@ impl<'a> CandlestickChart<'a> {
             time,
             bg,
         })
-    }
-
-    /// Draws the overlays on top of the series, after it and before the axes.
-    /// Overlays align to `layout`'s scales. There are none by default.
-    fn draw_overlays(&self, buf: &mut Buffer, layout: &PlotLayout) {
-        overlay::draw_all(&self.overlays, buf, layout);
     }
 }
 
