@@ -36,7 +36,7 @@ pub struct LineChart<'a> {
     pad_frac: f64,
     width: f64,
     gap: f64,
-    value_axis: ValueAxis,
+    value_axis: ValueAxis<'a>,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
     underlays: Vec<Overlay<'a>>,
@@ -113,7 +113,7 @@ impl<'a> LineChart<'a> {
 
     /// Sets the value (vertical) axis.
     #[must_use]
-    pub fn value_axis(mut self, axis: ValueAxis) -> Self {
+    pub fn value_axis(mut self, axis: ValueAxis<'a>) -> Self {
         self.value_axis = axis;
         self
     }
@@ -227,14 +227,19 @@ impl<'a> LineChart<'a> {
             height: area.height - bottom_axis_h,
         };
 
-        let (lo, hi) = self
-            .series
-            .iter()
-            .filter_map(LineSeries::value_bounds)
-            .reduce(|(lo, hi), (olo, ohi)| (lo.min(olo), hi.max(ohi)))?;
-        let (lo, hi) = overlay::union_bounds((lo, hi), &self.underlays);
-        let (lo, hi) = overlay::union_bounds((lo, hi), &self.overlays);
-        let value = ValueScale::autoscale(lo, hi, plot.height, self.pad_frac);
+        let value = match self.value_axis.bounds {
+            Some((min, max)) => ValueScale::new(min, max, plot.height),
+            None => {
+                let (lo, hi) = self
+                    .series
+                    .iter()
+                    .filter_map(LineSeries::value_bounds)
+                    .reduce(|(lo, hi), (olo, ohi)| (lo.min(olo), hi.max(ohi)))?;
+                let (lo, hi) = overlay::union_bounds((lo, hi), &self.underlays);
+                let (lo, hi) = overlay::union_bounds((lo, hi), &self.overlays);
+                ValueScale::autoscale(lo, hi, plot.height, self.pad_frac)
+            }
+        };
 
         let count = self.series.iter().map(LineSeries::len).max()?;
         let time = TimeScale::new(plot.width, count, self.width, self.gap);
@@ -309,6 +314,27 @@ mod tests {
         let empty: [Option<f64>; 0] = [];
         let chart = LineChart::new(LineSeries::new(&empty));
         assert!(layout_of(&chart, Rect::new(0, 0, 40, 20)).is_none());
+    }
+
+    #[test]
+    fn fixed_bounds_override_autoscale_and_padding() {
+        let values = [Some(10.0), Some(20.0)];
+        let chart = LineChart::new(LineSeries::new(&values))
+            .value_axis(ValueAxis::new().bounds(0.0, 200.0));
+        let layout = layout_of(&chart, Rect::new(0, 0, 40, 20)).expect("a plot fits");
+        // The pinned range is used verbatim, with no autoscale or padding.
+        assert_eq!(layout.value.min(), 0.0);
+        assert_eq!(layout.value.max(), 200.0);
+    }
+
+    #[test]
+    fn fixed_bounds_render_even_without_data() {
+        let empty: [Option<f64>; 0] = [];
+        let chart =
+            LineChart::new(LineSeries::new(&empty)).value_axis(ValueAxis::new().bounds(0.0, 100.0));
+        let layout = layout_of(&chart, Rect::new(0, 0, 40, 20)).expect("fixed bounds still render");
+        assert_eq!(layout.value.min(), 0.0);
+        assert_eq!(layout.value.max(), 100.0);
     }
 
     #[test]

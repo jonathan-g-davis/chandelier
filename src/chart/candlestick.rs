@@ -23,7 +23,7 @@ pub struct CandlestickChart<'a> {
     series: CandleSeries<'a>,
     base: Style,
     pad_frac: f64,
-    price_axis: PriceAxis,
+    price_axis: PriceAxis<'a>,
     time_axis: TimeAxis<'a>,
     show_axes: bool,
     underlays: Vec<Overlay<'a>>,
@@ -63,7 +63,7 @@ impl<'a> CandlestickChart<'a> {
 
     /// Sets the price (vertical) axis.
     #[must_use]
-    pub fn price_axis(mut self, axis: PriceAxis) -> Self {
+    pub fn price_axis(mut self, axis: PriceAxis<'a>) -> Self {
         self.price_axis = axis;
         self
     }
@@ -176,10 +176,15 @@ impl<'a> CandlestickChart<'a> {
             height: area.height - bottom_axis_h,
         };
 
-        let (lo, hi) = self.series.value_bounds()?;
-        let (lo, hi) = overlay::union_bounds((lo, hi), &self.underlays);
-        let (lo, hi) = overlay::union_bounds((lo, hi), &self.overlays);
-        let value = PriceScale::autoscale(lo, hi, plot.height, self.pad_frac);
+        let value = match self.price_axis.bounds {
+            Some((min, max)) => PriceScale::new(min, max, plot.height),
+            None => {
+                let (lo, hi) = self.series.value_bounds()?;
+                let (lo, hi) = overlay::union_bounds((lo, hi), &self.underlays);
+                let (lo, hi) = overlay::union_bounds((lo, hi), &self.overlays);
+                PriceScale::autoscale(lo, hi, plot.height, self.pad_frac)
+            }
+        };
         let time = self.series.time_scale(plot);
 
         Some(PlotLayout {

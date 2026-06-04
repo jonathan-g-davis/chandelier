@@ -13,26 +13,37 @@ use crate::scale::{TimeScale, ValueScale};
 /// axis.
 ///
 /// Carries how the labels are styled, how many columns the axis reserves on the
-/// right, and how the labels sit within those columns. The value range and tick
-/// positions are chosen automatically from the data in view, and how each value
-/// reads as a label is chosen by the chart that draws the axis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ValueAxis {
+/// right, and how the labels sit within those columns. How each value reads as a
+/// label is chosen by the chart that draws the axis.
+///
+/// By default the value range and tick positions are chosen automatically from
+/// the data in view. Pin the range with [`bounds`](Self::bounds), pin the tick
+/// positions with [`ticks`](Self::ticks), or nudge how many ticks are chosen
+/// automatically with [`tick_count`](Self::tick_count).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ValueAxis<'a> {
     pub(crate) style: Style,
     pub(crate) width: u16,
     pub(crate) labels_alignment: Alignment,
+    pub(crate) bounds: Option<(f64, f64)>,
+    pub(crate) ticks: Option<&'a [f64]>,
+    pub(crate) tick_count: usize,
 }
 
 /// The vertical axis of a [`CandlestickChart`](crate::CandlestickChart).
-pub type PriceAxis = ValueAxis;
+pub type PriceAxis<'a> = ValueAxis<'a>;
 
-impl ValueAxis {
-    /// A value axis with gray, right-aligned labels reserving eight columns.
+impl<'a> ValueAxis<'a> {
+    /// A value axis with gray, right-aligned labels reserving eight columns, an
+    /// autoscaled range, and six automatically chosen ticks.
     pub fn new() -> Self {
         Self {
             style: Style::new().fg(Color::Gray),
             width: 8,
             labels_alignment: Alignment::Right,
+            bounds: None,
+            ticks: None,
+            tick_count: 6,
         }
     }
 
@@ -56,16 +67,43 @@ impl ValueAxis {
         self.labels_alignment = alignment;
         self
     }
+
+    /// Pins the value range to `[min, max]`, overriding the autoscale that
+    /// otherwise fits the data in view.
+    ///
+    /// Padding and overlays no longer expand the range, and the chart renders
+    /// the fixed range even when it has no data to draw.
+    #[must_use]
+    pub fn bounds(mut self, min: f64, max: f64) -> Self {
+        self.bounds = Some((min, max));
+        self
+    }
+
+    /// Pins the tick positions to `values`, overriding the round-numbered ticks
+    /// chosen automatically. Ticks outside the value range are not drawn.
+    #[must_use]
+    pub fn ticks(mut self, values: &'a [f64]) -> Self {
+        self.ticks = Some(values);
+        self
+    }
+
+    /// Sets the target number of automatically chosen ticks. Ignored when the
+    /// tick positions are pinned with [`ticks`](Self::ticks). Defaults to six.
+    #[must_use]
+    pub fn tick_count(mut self, count: usize) -> Self {
+        self.tick_count = count;
+        self
+    }
 }
 
-impl Default for ValueAxis {
+impl Default for ValueAxis<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Styled for ValueAxis {
-    type Item = ValueAxis;
+impl<'a> Styled for ValueAxis<'a> {
+    type Item = ValueAxis<'a>;
 
     fn style(&self) -> Style {
         self.style
@@ -240,18 +278,26 @@ pub(crate) fn format_volume(value: f64, _step: f64) -> String {
 
 /// Draws the right-hand value axis.
 ///
-/// Ticks are round-number ticks across the scale. Labels are formatted by the
-/// provided function and aligned within the axis columns.
+/// Ticks are the axis's pinned ticks, or round-number ticks across the scale.
+/// Labels are formatted by the provided function and aligned within the axis
+/// columns.
 pub(crate) fn draw_value_axis(
     buf: &mut Buffer,
     plot: Rect,
     scale: &ValueScale,
-    axis: &ValueAxis,
+    axis: &ValueAxis<'_>,
     format: &dyn Fn(f64, f64) -> String,
 ) {
-    let ticks = value_ticks(scale.min(), scale.max(), 6);
+    let auto;
+    let ticks: &[f64] = match axis.ticks {
+        Some(ticks) => ticks,
+        None => {
+            auto = value_ticks(scale.min(), scale.max(), axis.tick_count);
+            &auto
+        }
+    };
     let step = if ticks.len() >= 2 {
-        ticks[1] - ticks[0]
+        (ticks[1] - ticks[0]).abs()
     } else {
         1.0
     };
@@ -366,6 +412,61 @@ mod tests {
         assert_eq!(axis.width, 10);
         assert_eq!(axis.style.fg, Some(Color::Red));
         assert_eq!(axis.labels_alignment, Alignment::Left);
+    }
+
+    #[test]
+    fn value_axis_bounds_and_tick_builders() {
+        let axis = ValueAxis::default();
+        assert!(axis.bounds.is_none());
+        assert!(axis.ticks.is_none());
+        assert_eq!(axis.tick_count, 6);
+
+        let ticks = [0.0, 50.0, 100.0];
+        let axis = axis.bounds(0.0, 100.0).ticks(&ticks).tick_count(10);
+        assert_eq!(axis.bounds, Some((0.0, 100.0)));
+        assert_eq!(axis.ticks, Some(&ticks[..]));
+        assert_eq!(axis.tick_count, 10);
+    }
+
+    #[test]
+    fn fixed_ticks_are_drawn_instead_of_auto_ticks() {
+        let scale = ValueScale::new(0.0, 100.0, 10);
+        let ticks = [0.0, 50.0, 100.0];
+        let axis = ValueAxis::new().ticks(&ticks).width(6);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 12, 10));
+
+        draw_value_axis(
+            &mut buf,
+            Rect::new(0, 0, 6, 10),
+            &scale,
+            &axis,
+            &|v, step| format_price(v, step),
+        );
+
+        let text: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(text.contains("100"), "pinned tick 100 should be labelled");
+        assert!(text.contains("50"), "pinned tick 50 should be labelled");
+    }
+
+    #[test]
+    fn ticks_outside_the_range_are_not_drawn() {
+        let scale = ValueScale::new(0.0, 100.0, 10);
+        // 250 sits above the range and must be dropped.
+        let ticks = [50.0, 250.0];
+        let axis = ValueAxis::new().ticks(&ticks).width(6);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 12, 10));
+
+        draw_value_axis(
+            &mut buf,
+            Rect::new(0, 0, 6, 10),
+            &scale,
+            &axis,
+            &|v, step| format_price(v, step),
+        );
+
+        let text: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(text.contains("50"));
+        assert!(!text.contains("250"), "out-of-range tick must be dropped");
     }
 
     #[test]
