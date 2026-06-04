@@ -7,10 +7,12 @@
 
 mod annotation;
 mod label;
+mod line;
 mod trend_line;
 
 pub use annotation::{Anchor, Annotation, Annotations};
 pub use label::Label;
+pub use line::LineOverlay;
 pub use trend_line::{LineStyle, TrendLine};
 
 use ratatui_core::buffer::Buffer;
@@ -34,6 +36,8 @@ pub(crate) trait OverlayDraw {
 pub enum Overlay<'a> {
     /// A straight line drawn on the value scale.
     Trend(TrendLine<'a>),
+    /// A connected line over the candles, such as a moving average.
+    Line(LineOverlay<'a>),
     /// Point annotations aligned to the candles.
     Annotations(Annotations<'a>),
 }
@@ -42,6 +46,7 @@ impl Overlay<'_> {
     pub(crate) fn value_bounds(&self) -> Option<(f64, f64)> {
         match self {
             Overlay::Trend(o) => o.value_bounds(),
+            Overlay::Line(o) => o.value_bounds(),
             Overlay::Annotations(o) => o.value_bounds(),
         }
     }
@@ -49,6 +54,7 @@ impl Overlay<'_> {
     pub(crate) fn draw(&self, buf: &mut Buffer, layout: &PlotLayout) {
         match self {
             Overlay::Trend(o) => o.draw(buf, layout),
+            Overlay::Line(o) => o.draw(buf, layout),
             Overlay::Annotations(o) => o.draw(buf, layout),
         }
     }
@@ -57,6 +63,12 @@ impl Overlay<'_> {
 impl<'a> From<TrendLine<'a>> for Overlay<'a> {
     fn from(line: TrendLine<'a>) -> Self {
         Overlay::Trend(line)
+    }
+}
+
+impl<'a> From<LineOverlay<'a>> for Overlay<'a> {
+    fn from(line: LineOverlay<'a>) -> Self {
+        Overlay::Line(line)
     }
 }
 

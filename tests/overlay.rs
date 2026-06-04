@@ -2,8 +2,8 @@
 //! on the grid.
 
 use chandelier::{
-    Anchor, Annotation, Annotations, Candle, CandleSeries, CandlestickChart, Label, LineStyle,
-    TrendLine, Volume, VolumeChart, VolumeSeries,
+    Anchor, Annotation, Annotations, Candle, CandleSeries, CandlestickChart, Label, LineOverlay,
+    LineStyle, TrendLine, Volume, VolumeChart, VolumeSeries,
 };
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::{Alignment, Rect};
@@ -38,6 +38,14 @@ fn cell_of(buf: &Buffer, symbol: &str) -> Option<(u16, u16)> {
     (area.y..area.y + area.height)
         .flat_map(|y| (area.x..area.x + area.width).map(move |x| (x, y)))
         .find(|&(x, y)| buf[(x, y)].symbol() == symbol)
+}
+
+/// How many painted cells carry the given foreground color.
+fn count_fg(buf: &Buffer, color: Color) -> usize {
+    buf.content()
+        .iter()
+        .filter(|c| c.symbol() != " " && c.fg == color)
+        .count()
 }
 
 fn candles() -> [Candle; 3] {
@@ -291,6 +299,80 @@ fn volume_overlay_raises_the_top_but_keeps_the_zero_floor() {
     // The bottom row still holds bars in both, so the floor did not move.
     let floor = 12 - 1 - 1; // minus the time axis row
     assert_eq!(row_text(&plain_buf, floor), row_text(&buf, floor));
+}
+
+#[test]
+fn line_overlay_paints_in_its_color() {
+    let candles = candles();
+    let values = [Some(104.0), Some(104.0), Some(104.0)];
+    let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .overlay(LineOverlay::new(&values).style(Color::Magenta));
+    let buf = render(&chart, 24, 12);
+
+    assert!(
+        count_fg(&buf, Color::Magenta) > 0,
+        "line color should appear"
+    );
+}
+
+#[test]
+fn a_gap_breaks_the_line() {
+    let candles = candles();
+    let full = [Some(101.0), Some(106.0), Some(102.0)];
+    let gapped = [Some(101.0), None, Some(102.0)];
+    let painted = |values: &[Option<f64>]| {
+        let chart = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+            .axes(false)
+            .overlay(LineOverlay::new(values).style(Color::Magenta));
+        count_fg(&render(&chart, 24, 12), Color::Magenta)
+    };
+
+    assert!(
+        painted(&gapped) < painted(&full),
+        "a None should drop the line cells it would have connected"
+    );
+}
+
+#[test]
+fn all_none_line_draws_nothing() {
+    let candles = candles();
+    let none = [None, None, None];
+    let plain = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0)).axes(false);
+    let with = CandlestickChart::new(CandleSeries::new(&candles).width(3.0).gap(1.0))
+        .axes(false)
+        .overlay(LineOverlay::new(&none));
+
+    assert_eq!(
+        render(&plain, 24, 12).content(),
+        render(&with, 24, 12).content(),
+        "an all-None line leaves the candles untouched"
+    );
+}
+
+#[test]
+fn line_overlay_autoscales_to_stay_in_view() {
+    let candles = candles();
+    let values = [Some(150.0), Some(150.0), Some(150.0)];
+
+    let chart =
+        CandlestickChart::new(CandleSeries::new(&candles)).overlay(LineOverlay::new(&values));
+    let buf = render(&chart, 40, 16);
+    assert!(count_fg(&buf, Color::White) > 0, "line should be visible");
+    let text: String = buf.content().iter().map(|c| c.symbol()).collect();
+    assert!(text.contains("120"), "axis should expand toward the line");
+
+    let pinned = CandlestickChart::new(CandleSeries::new(&candles))
+        .overlay(LineOverlay::new(&values).autoscale(false));
+    let ptext: String = render(&pinned, 40, 16)
+        .content()
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(
+        !ptext.contains("120"),
+        "axis should not expand when autoscale is off"
+    );
 }
 
 #[test]
