@@ -84,9 +84,9 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         .style(base)
         .price_axis(PriceAxis::default().style(axis_style))
         .time_axis(TimeAxis::default().style(axis_style).labels(labels))
-        // A moving average tracking the candles, drawn first so the reference
-        // lines and markers sit on top of it.
-        .overlay(LineOverlay::new(&moving_average).style(Color::Rgb(255, 202, 40)))
+        // A moving average tracking the candles, drawn behind them so the
+        // candles sit on top of it.
+        .underlay(LineOverlay::new(&moving_average).style(Color::Rgb(255, 202, 40)))
         // The last close: a solid line, label against the price axis (default).
         .overlay(
             TrendLine::at(last)
