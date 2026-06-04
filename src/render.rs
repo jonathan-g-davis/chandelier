@@ -12,6 +12,7 @@ use crate::scale::{TimeScale, ValueScale};
 mod block;
 mod box_drawing;
 mod braille;
+mod line;
 mod quadrant;
 mod wick;
 
@@ -19,6 +20,7 @@ pub(crate) use block::Block;
 pub(crate) use block::draw_bar;
 pub(crate) use box_drawing::BoxDrawing;
 pub(crate) use braille::Braille;
+pub(crate) use line::LineRasterizer;
 pub(crate) use quadrant::Quadrant;
 
 /// The laid-out plot area together with the scales mapping data onto it.

@@ -12,6 +12,7 @@ use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 use ratatui_core::symbols::braille::BRAILLE;
 
+use crate::render::line::{self, LineRasterizer};
 use crate::render::{self, BodyFill, CandleGeometry, Rasterizer};
 
 /// Braille-dot rasterizer backend.
@@ -24,6 +25,27 @@ pub(crate) struct Braille;
 impl Rasterizer for Braille {
     fn draw_candle(&self, buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry) {
         draw_candle(buf, plot, geometry);
+    }
+}
+
+impl LineRasterizer for Braille {
+    fn draw_polyline(
+        &self,
+        buf: &mut Buffer,
+        plot: Rect,
+        points: &[Option<(f64, f64)>],
+        color: Color,
+        bg: Color,
+    ) {
+        line::rasterize(
+            buf,
+            plot,
+            points,
+            (u32::from(DOTS_X), DOTS_Y),
+            |pattern| BRAILLE[pattern as usize],
+            color,
+            bg,
+        );
     }
 }
 
