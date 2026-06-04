@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.2](https://github.com/jonathan-g-davis/chandelier/compare/v0.3.1...v0.3.2) - 2026-06-04
 
-### Other
+### Added
 
-- Support underlays ([#20](https://github.com/jonathan-g-davis/chandelier/pull/20))
-- Line overlays ([#18](https://github.com/jonathan-g-davis/chandelier/pull/18))
+- Line chart overlays for plotting on a candlestick or volume chart, such as an SMA ([#18](https://github.com/jonathan-g-davis/chandelier/pull/18))
+- Support underlays to allow drawing behind the candlesticks/bars ([#20](https://github.com/jonathan-g-davis/chandelier/pull/20))
 
 ## [0.3.1](https://github.com/jonathan-g-davis/chandelier/compare/v0.3.0...v0.3.1) - 2026-06-04
 
