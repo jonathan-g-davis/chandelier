@@ -28,3 +28,4 @@ ratatui-widgets = "0.3"
 [dev-dependencies]
 rand = "0.9"
 ratatui = "0.30"
+ta = "0.5.0"
