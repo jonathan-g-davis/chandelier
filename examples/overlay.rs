@@ -1,6 +1,6 @@
-//! A terminal app that draws horizontal [`TrendLine`] overlays on a candlestick
-//! chart: the last close, plus support and resistance levels, each label aligned
-//! differently along its line.
+//! A terminal app that layers overlays on a candlestick chart: a moving-average
+//! [`LineOverlay`], horizontal [`TrendLine`] reference levels with differently
+//! aligned labels, and buy/sell [`Annotation`] markers.
 //!
 //! Run it with:
 //!
@@ -11,8 +11,8 @@
 //! Press `q` or `Esc` to quit.
 
 use chandelier::{
-    Annotation, Annotations, Candle, CandleSeries, CandlestickChart, Label, PriceAxis, TimeAxis,
-    TrendLine, price_bounds,
+    Annotation, Annotations, Candle, CandleSeries, CandlestickChart, Label, LineOverlay, PriceAxis,
+    TimeAxis, TrendLine, price_bounds,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -65,6 +65,10 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         Annotation::sell(n - 5, candles[n - 5].high),
     ];
 
+    // A 10-period simple moving average of the closes, undefined until enough
+    // candles have accumulated.
+    let moving_average = sma(candles, 10);
+
     let candle_series = CandleSeries::new(candles)
         .width(1.0)
         .gap(1.0)
@@ -80,6 +84,9 @@ fn draw(frame: &mut Frame, candles: &[Candle], labels: &[String]) {
         .style(base)
         .price_axis(PriceAxis::default().style(axis_style))
         .time_axis(TimeAxis::default().style(axis_style).labels(labels))
+        // A moving average tracking the candles, drawn first so the reference
+        // lines and markers sit on top of it.
+        .overlay(LineOverlay::new(&moving_average).style(Color::Rgb(255, 202, 40)))
         // The last close: a solid line, label against the price axis (default).
         .overlay(
             TrendLine::at(last)
@@ -126,6 +133,19 @@ fn sample_candles() -> Vec<Candle> {
         price = close;
     }
     candles
+}
+
+/// A simple moving average of the candle closes over `period` candles, aligned
+/// one-to-one with the candles. The first `period - 1` entries are `None`.
+fn sma(candles: &[Candle], period: usize) -> Vec<Option<f64>> {
+    (0..candles.len())
+        .map(|i| {
+            (i + 1 >= period).then(|| {
+                let window = &candles[i + 1 - period..=i];
+                window.iter().map(|c| c.close).sum::<f64>() / period as f64
+            })
+        })
+        .collect()
 }
 
 /// Sequential "day" labels for the x-axis.

@@ -1,6 +1,6 @@
 //! Glyph family selection for candle rendering.
 
-use crate::render::{Block, BoxDrawing, Braille, Quadrant, Rasterizer};
+use crate::render::{Block, BoxDrawing, Braille, LineRasterizer, Quadrant, Rasterizer};
 
 /// The glyph family a chart rasterizes candles with.
 ///
@@ -41,13 +41,21 @@ pub enum Marker {
 }
 
 impl Marker {
-    /// The rasterizer backend that draws this glyph family.
+    /// The rasterizer backend that draws candles in this glyph family.
     pub(crate) fn rasterizer(self) -> &'static dyn Rasterizer {
         match self {
             Self::Block => &Block,
             Self::Braille => &Braille,
             Self::Quadrant => &Quadrant,
             Self::BoxDrawing => &BoxDrawing,
+        }
+    }
+
+    /// The backend that draws a connected line in this glyph family.
+    pub(crate) fn line_rasterizer(self) -> &'static dyn LineRasterizer {
+        match self {
+            Self::Braille => &Braille,
+            Self::Quadrant | Self::Block | Self::BoxDrawing => &Quadrant,
         }
     }
 }

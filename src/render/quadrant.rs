@@ -10,6 +10,7 @@ use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::Color;
 
+use crate::render::line::{self, LineRasterizer};
 use crate::render::{self, BodyFill, CandleGeometry, Rasterizer, wick};
 
 /// Quadrant-block rasterizer backend.
@@ -21,6 +22,27 @@ pub(crate) struct Quadrant;
 impl Rasterizer for Quadrant {
     fn draw_candle(&self, buf: &mut Buffer, plot: Rect, geometry: &CandleGeometry) {
         draw_candle(buf, plot, geometry);
+    }
+}
+
+impl LineRasterizer for Quadrant {
+    fn draw_polyline(
+        &self,
+        buf: &mut Buffer,
+        plot: Rect,
+        points: &[Option<(f64, f64)>],
+        color: Color,
+        bg: Color,
+    ) {
+        line::rasterize(
+            buf,
+            plot,
+            points,
+            (u32::from(SUB_X), SUB_Y),
+            |pattern| QUADRANTS[pattern as usize].chars().next().unwrap_or(' '),
+            color,
+            bg,
+        );
     }
 }
 
